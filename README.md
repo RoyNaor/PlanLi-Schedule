@@ -1,185 +1,189 @@
-📅 AI-Based Medical Scheduling System
-=====================================
+# 📅 AI-Based Medical Scheduling System
 
-מערכת שיבוץ רפואית חכמה המבוססת על שילוב של:
+An intelligent medical staff scheduling platform that combines:
 
-*   🧠 הבנת שפה טבעית (LLM)
-    
-*   ⚙️ מנוע אופטימיזציה (Google OR-Tools)
-    
-*   🔐 אימות Firebase
-    
-*   🗄️ PostgreSQL (Supabase)
-    
+- 🧠 Natural language understanding (LLM)
+- ⚙️ Constraint optimization (Google OR-Tools CP-SAT)
+- 🔐 Firebase authentication
+- 🗄️ PostgreSQL (Supabase-compatible)
 
-🎯 Vision
----------
+## 🎯 Vision
 
-יצירת מערכת שיבוץ אוטומטית לצוותים רפואיים המשלבת:
+Build an automated scheduling system for medical teams that can:
 
-1.  קליטת אילוצים בשפה טבעית (לדוגמה: "אני לא יכול בחמישי בערב")
-    
-2.  תרגום האילוץ ל-JSON מובנה באמצעות LLM
-    
-3.  בניית מודל מתמטי
-    
-4.  יצירת לוח זמנים אופטימלי והוגן באמצעות CP-SAT Solver
-    
+1. Collect constraints in natural language (for example: *"I can't work Thursday evening"*).
+2. Convert each constraint into structured JSON using an LLM.
+3. Build a mathematical optimization model.
+4. Generate a fair, high-quality schedule with CP-SAT.
 
-🏗 Architecture
-===============
+## 🏗️ Architecture
 
-Frontend (React)
-----------------
+### Frontend (React)
 
-*   Framework: React
-    
-*   Styling: TailwindCSS
-    
-*   State: Hooks + Context
-    
-*   Auth: Firebase Client SDK
-    
-*   Calendar: react-big-calendar
-    
+- **Framework:** React
+- **Styling:** Tailwind CSS
+- **State Management:** Hooks + Context
+- **Authentication:** Firebase Client SDK
+- **Calendar UI:** `react-big-calendar`
 
-Backend (Node + Python)
------------------------
+### Backend (Node.js + Python)
 
-### Node.js
+#### Node.js service
 
-*   API Gateway
-    
-*   Token verification
-    
-*   Routing
-    
-*   Communication with Python service
-    
+- API gateway
+- Firebase token verification
+- Route orchestration
+- Communication with the Python solver service
 
-### Python
+#### Python service
 
-*   OpenAI integration (GPT-4o-mini)
-    
-*   OR-Tools CP-SAT Solver
-    
-*   Business logic
-    
+- OpenAI integration (`gpt-4o-mini`)
+- OR-Tools CP-SAT model + solver
+- Scheduling business logic
 
-Infrastructure
---------------
+### Infrastructure
 
-*   Authentication: Firebase Auth (Email/Password)
-    
-*   Database: PostgreSQL (Supabase recommended)
-    
-*   Firebase Admin SDK (Server-side verification)
-    
+- **Authentication:** Firebase Auth (Email/Password)
+- **Database:** PostgreSQL (Supabase recommended)
+- **Server-side auth verification:** Firebase Admin SDK
 
-🔐 Auth Flow
-============
+## 🔐 Authentication Flow
 
-1.  User logs in via Firebase (Frontend).
-    
-2.  Firebase returns ID Token.
-    
-3.  Every API call sends:
-    
+1. The user logs in through Firebase on the frontend.
+2. Firebase returns an ID token.
+3. Each API request includes:
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`Authorization: Bearer` 
+```http
+Authorization: Bearer <firebase_id_token>
+```
 
-1.  Node verifies token using Firebase Admin.
-    
-2.  UID is extracted and used for DB operations.
-    
+4. The Node.js backend verifies the token with Firebase Admin.
+5. The backend extracts the `uid` and uses it for user-scoped DB operations.
 
-🗄 Database Schema
-==================
+## 🗄️ Database Schema
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   CREATE TABLE users (      id VARCHAR(128) PRIMARY KEY,      email VARCHAR(255),      full_name VARCHAR(255),      role VARCHAR(50),      seniority_level INT DEFAULT 1  );  CREATE TABLE constraints (      id SERIAL PRIMARY KEY,      user_id VARCHAR(128) REFERENCES users(id),      raw_text TEXT,      start_time TIMESTAMP NOT NULL,      end_time TIMESTAMP NOT NULL,      constraint_type VARCHAR(20),      weight INT DEFAULT 10,      created_at TIMESTAMP DEFAULT NOW()  );  CREATE TABLE shifts_config (      id SERIAL PRIMARY KEY,      start_time TIMESTAMP,      end_time TIMESTAMP,      required_doctors INT DEFAULT 1  );  CREATE TABLE final_schedule (      id SERIAL PRIMARY KEY,      shift_id INT REFERENCES shifts_config(id),      user_id VARCHAR(128) REFERENCES users(id),      generated_at TIMESTAMP DEFAULT NOW()  );   `
+```sql
+CREATE TABLE users (
+    id VARCHAR(128) PRIMARY KEY,
+    email VARCHAR(255),
+    full_name VARCHAR(255),
+    role VARCHAR(50),
+    seniority_level INT DEFAULT 1
+);
 
-🖥 UI Scope
-===========
+CREATE TABLE constraints (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(128) REFERENCES users(id),
+    raw_text TEXT,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    constraint_type VARCHAR(20),
+    weight INT DEFAULT 10,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
-🟢 Login Screen
----------------
+CREATE TABLE shifts_config (
+    id SERIAL PRIMARY KEY,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    required_doctors INT DEFAULT 1
+);
 
-*   Firebase Email/Password
-    
-*   Role-based routing
-    
+CREATE TABLE final_schedule (
+    id SERIAL PRIMARY KEY,
+    shift_id INT REFERENCES shifts_config(id),
+    user_id VARCHAR(128) REFERENCES users(id),
+    generated_at TIMESTAMP DEFAULT NOW()
+);
+```
 
-🟢 Doctor Chat Screen
----------------------
+## 🖥️ UI Scope
 
-*   Free text input
-    
-*   AI extracts constraint
-    
-*   Confirmation card:
-    
-    *   Date
-        
-    *   Time
-        
-    *   HARD / SOFT
-        
-    *   \[Confirm\] \[Edit\] \[Delete\]
-        
+### ✅ Login Screen
 
-🟢 Admin Dashboard
-------------------
+- Firebase Email/Password sign-in
+- Role-based routing
 
-*   Generate Schedule Button
-    
-*   Calendar View
-    
-*   KPIs:
-    
-    *   % honored constraints
-        
-    *   Fairness score
-        
+### ✅ Doctor Chat Screen
 
-🌐 API Design
-=============
+- Free-text constraint input
+- AI-powered extraction of scheduling constraints
+- Confirmation card with:
+  - Date
+  - Time
+  - Constraint type (HARD / SOFT)
+  - Actions: **Confirm**, **Edit**, **Delete**
 
-POST /api/analyze-text
-----------------------
+### ✅ Admin Dashboard
 
-Input:
+- **Generate Schedule** action
+- Calendar-based schedule view
+- KPI widgets:
+  - % of honored constraints
+  - Fairness score
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   {    "text": "אני לא יכול בשלישי בערב",    "user_id": "abc123"  }   `
+## 🌐 API Design
 
-Output:
+### `POST /api/analyze-text`
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   {    "start_time": "...",    "end_time": "...",    "constraint_type": "HARD",    "weight": 80  }   `
+Extract a structured constraint from natural language.
 
-POST /api/save-constraint
--------------------------
+**Request**
 
-Stores confirmed constraint.
+```json
+{
+  "text": "I can't work Tuesday evening",
+  "user_id": "abc123"
+}
+```
 
-POST /api/solve-schedule
-------------------------
+**Response**
 
-Input:
+```json
+{
+  "start_time": "2026-03-03T18:00:00Z",
+  "end_time": "2026-03-03T23:00:00Z",
+  "constraint_type": "HARD",
+  "weight": 80
+}
+```
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   {    "start_date": "2026-03-01",    "end_date": "2026-03-07"  }   `
+### `POST /api/save-constraint`
 
-Process:
+Persist a user-confirmed constraint.
 
-1.  Fetch doctors
-    
-2.  Fetch constraints
-    
-3.  Build CP-SAT model
-    
-4.  Solve
-    
-5.  Save to final\_schedule
-    
+### `POST /api/solve-schedule`
 
-Output:
+Generate and store an optimized schedule for a selected date range.
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   [    {      "shift_id": 1,      "user_id": "abc123"    }  ]   `
+**Request**
+
+```json
+{
+  "start_date": "2026-03-01",
+  "end_date": "2026-03-07"
+}
+```
+
+**Solver pipeline**
+
+1. Fetch doctors.
+2. Fetch constraints.
+3. Build the CP-SAT model.
+4. Solve the optimization problem.
+5. Persist assignments to `final_schedule`.
+
+**Response**
+
+```json
+[
+  {
+    "shift_id": 1,
+    "user_id": "abc123"
+  }
+]
+```
+
+---
+
+If you'd like, the next step can be adding a **Quick Start** section with local setup instructions (`frontend`, `node-api`, `python-service`, and environment variables).
