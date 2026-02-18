@@ -183,7 +183,3 @@ Generate and store an optimized schedule for a selected date range.
   }
 ]
 ```
-
----
-
-If you'd like, the next step can be adding a **Quick Start** section with local setup instructions (`frontend`, `node-api`, `python-service`, and environment variables).
