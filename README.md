@@ -7,6 +7,20 @@ An intelligent medical staff scheduling platform that combines:
 - 🔐 Firebase authentication
 - 🗄️ PostgreSQL (Supabase-compatible)
 
+## 🧪 Current Minimal Implementation (Today)
+
+- **Client:** Vite + React starter with a lightweight MVP status page and backend health check.
+- **Server:** Express API with `GET /`, `GET /api/health`, and `GET /api/version`.
+- **Status:** Core architecture targets (Firebase auth, chat extraction, persistence, and solver integration) are still pending.
+
+### Recommended Next Fixes
+
+1. Add Firebase client + server token verification middleware.
+2. Add `POST /api/chat` + `POST /api/save-constraint` endpoints with strict schema validation (`zod`).
+3. Introduce persistence (SQLite or Postgres) and migrate from in-memory behavior.
+4. Create Python AI/solver service boundary and wire `POST /api/generate-schedule`.
+5. Add CI checks: `typecheck`, `lint`, and API smoke tests.
+
 ## 🎯 Vision
 
 Build an automated scheduling system for medical teams that can:
