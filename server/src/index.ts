@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import express from "express";
 
 import router from "./routes.js";
+import { closeDatabasePool } from "./services/database.service.js";
 
 dotenv.config();
 
@@ -15,9 +16,10 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-function shutdown() {
+async function shutdown() {
   console.log("Shutting down server...");
-  server.close(() => {
+  server.close(async () => {
+    await closeDatabasePool();
     process.exit(0);
   });
 }
