@@ -17,6 +17,7 @@ export function getVersion(_req: Request, res: Response) {
 export async function getDatabaseHealth(_req: Request, res: Response) {
   try {
     const result = await checkDatabaseConnection();
+    console.log("✅ Database health check passed.");
 
     res.json({
       ...result,
@@ -24,6 +25,7 @@ export async function getDatabaseHealth(_req: Request, res: Response) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown database error";
+    console.error(`❌ Database health check failed: ${message}`);
 
     res.status(500).json({
       ok: false,
