@@ -1,38 +1,39 @@
-const neonHttpUrl = process.env.NEON_HTTP_URL;
-const neonApiKey = process.env.NEON_API_KEY;
+import { Pool } from "pg";
 
-if (!neonHttpUrl || !neonApiKey) {
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
   console.warn(
-    "[database] NEON_HTTP_URL/NEON_API_KEY are not set. Database checks will fail until configured.",
+    "[database] DATABASE_URL is not set. Database checks will fail until configured.",
   );
 }
 
-type NeonSqlResponse = {
-  rows?: Array<{ server_time?: string }>;
-};
+const pool = new Pool(
+  databaseUrl
+    ? {
+        connectionString: databaseUrl,
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      }
+    : undefined,
+);
 
 export async function checkDatabaseConnection() {
-  if (!neonHttpUrl || !neonApiKey) {
-    throw new Error("Missing NEON_HTTP_URL or NEON_API_KEY environment variables.");
+  if (!databaseUrl) {
+    throw new Error("Missing DATABASE_URL environment variable.");
   }
 
-  const response = await fetch(neonHttpUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${neonApiKey}`,
-    },
-    body: JSON.stringify({ query: "SELECT NOW() AS server_time" }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Neon request failed with status ${response.status}`);
-  }
-
-  const payload = (await response.json()) as NeonSqlResponse;
+  const result = await pool.query<{ server_time: Date }>(
+    "SELECT NOW() AS server_time",
+  );
 
   return {
     ok: true,
-    serverTime: payload.rows?.[0]?.server_time ?? null,
+    serverTime: result.rows[0]?.server_time?.toISOString() ?? null,
   };
+}
+
+export async function closeDatabasePool() {
+  await pool.end();
 }
