@@ -12,8 +12,8 @@ const PORT = Number(process.env.PORT ?? 3000);
 
 async function start() {
   try {
-    const db = await checkDatabaseConnection();
-    console.log("✅ DB connected:", db);
+    await checkDatabaseConnection();
+    console.log("✅ Database connection established.");
 
     const server = app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
@@ -31,7 +31,8 @@ async function start() {
     process.on("SIGTERM", shutdown);
 
   } catch (err) {
-    console.error("❌ Failed to connect to DB:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`❌ Failed to connect to DB: ${message}`);
     process.exit(1);
   }
 }
