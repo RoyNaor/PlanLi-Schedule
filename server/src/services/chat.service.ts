@@ -10,6 +10,7 @@ type Sender = "staff" | "assistant";
 
 interface ConversationRow {
   id: string;
+  user_message_count: number;
 }
 
 interface MessageRow {
@@ -18,6 +19,11 @@ interface MessageRow {
   sender: Sender;
   content: string;
   created_at: Date;
+}
+
+interface TranscriptMessage {
+  sender: Sender;
+  content: string;
 }
 
 interface SendMessageInput {
@@ -35,6 +41,7 @@ const RECAP_EVERY_USER_MESSAGES = 4;
 
 const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
 const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
+const STORABLE_INTENTS = new Set<z.infer<typeof intentEnum>>(["constraint", "schedule_query"]);
 
 const intentResponseSchema = z.object({
   intent: intentEnum,
@@ -108,15 +115,27 @@ export const ChatService = {
   async sendMessage({ userId, message }: SendMessageInput): Promise<SendMessageResult> {
     await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
+    const userMessagesCount = await this.incrementAndGetUserMessageCount(conversationId);
 
-    await this.createMessage({
-      conversationId,
-      sender: "staff",
-      content: message,
-    });
+    const persistedConversationMessages = await this.getMessagesByConversationId(conversationId);
+    const conversationWithIncomingMessage: TranscriptMessage[] = [
+      ...persistedConversationMessages,
+      {
+        sender: "staff",
+        content: message,
+      },
+    ];
 
-    const conversationMessages = await this.getMessagesByConversationId(conversationId);
-    const intentResponse = await this.generateAssistantResponse(conversationMessages);
+    const intentResponse = await this.generateAssistantResponse(conversationWithIncomingMessage);
+    const shouldPersistMessages = STORABLE_INTENTS.has(intentResponse.intent);
+
+    if (shouldPersistMessages) {
+      await this.createMessage({
+        conversationId,
+        sender: "staff",
+        content: message,
+      });
+    }
 
     if (intentResponse.intent === "constraint" && intentResponse.constraints.length > 0) {
       for (const constraint of intentResponse.constraints) {
@@ -130,19 +149,17 @@ export const ChatService = {
       }
     }
 
-    await this.createMessage({
-      conversationId,
-      sender: "assistant",
-      content: intentResponse.assistant_reply,
-    });
-
-    const userMessagesCount = conversationMessages.filter(
-      (conversationMessage) => conversationMessage.sender === "staff",
-    ).length;
+    if (shouldPersistMessages) {
+      await this.createMessage({
+        conversationId,
+        sender: "assistant",
+        content: intentResponse.assistant_reply,
+      });
+    }
 
     let recapText: string | undefined;
-    if (userMessagesCount > 1 && userMessagesCount % RECAP_EVERY_USER_MESSAGES === 0) {
-      recapText = await this.generateRecapMessage(conversationMessages);
+    if (shouldPersistMessages && userMessagesCount > 1 && userMessagesCount % RECAP_EVERY_USER_MESSAGES === 0) {
+      recapText = await this.generateRecapMessage(conversationWithIncomingMessage);
       await this.createMessage({
         conversationId,
         sender: "assistant",
@@ -170,7 +187,7 @@ export const ChatService = {
 
   async getOrCreateConversation(userId: string): Promise<string> {
     const existingConversation = await queryDatabase<ConversationRow>(
-      "SELECT id FROM conversations WHERE user_id = $1 LIMIT 1",
+      "SELECT id, user_message_count FROM conversations WHERE user_id = $1 LIMIT 1",
       [userId],
     );
 
@@ -179,11 +196,23 @@ export const ChatService = {
     }
 
     const createdConversation = await queryDatabase<ConversationRow>(
-      "INSERT INTO conversations (user_id) VALUES ($1) RETURNING id",
+      "INSERT INTO conversations (user_id, user_message_count) VALUES ($1, 0) RETURNING id, user_message_count",
       [userId],
     );
 
     return createdConversation.rows[0].id;
+  },
+
+  async incrementAndGetUserMessageCount(conversationId: string): Promise<number> {
+    const result = await queryDatabase<ConversationRow>(
+      `UPDATE conversations
+       SET user_message_count = user_message_count + 1
+       WHERE id = $1
+       RETURNING id, user_message_count`,
+      [conversationId],
+    );
+
+    return result.rows[0]?.user_message_count ?? 1;
   },
 
   async ensureUserExists(userId: string) {
@@ -220,13 +249,17 @@ export const ChatService = {
     return result.rows;
   },
 
-  async generateAssistantResponse(messages: MessageRow[]): Promise<IntentResponse> {
-    const transcript = messages
+  formatTranscript(messages: TranscriptMessage[]): string {
+    return messages
       .map((message) => {
         const role = message.sender === "staff" ? "User" : "Assistant";
         return `${role}: ${message.content}`;
       })
       .join("\n");
+  },
+
+  async generateAssistantResponse(messages: TranscriptMessage[]): Promise<IntentResponse> {
+    const transcript = this.formatTranscript(messages);
 
     const response = await openai.responses.create({
       model: "gpt-4o-mini",
@@ -291,13 +324,8 @@ export const ChatService = {
     return parsed.data;
   },
 
-  async generateRecapMessage(messages: MessageRow[]): Promise<string> {
-    const transcript = messages
-      .map((message) => {
-        const role = message.sender === "staff" ? "User" : "Assistant";
-        return `${role}: ${message.content}`;
-      })
-      .join("\n");
+  async generateRecapMessage(messages: TranscriptMessage[]): Promise<string> {
+    const transcript = this.formatTranscript(messages);
 
     const response = await openai.responses.create({
       model: "gpt-4o-mini",
