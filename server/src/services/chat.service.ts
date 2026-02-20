@@ -77,6 +77,11 @@ Intent rules:
    - MUST split multiple days and/or multiple time windows into multiple constraint objects.
    - Extract start_time and end_time as ISO-8601 strings with timezone offset.
    - Extract type as "HARD" or "SOFT". If unclear, default to "HARD".
+   Classification rules for type:
+    - "לא יכול", "אסור", "יש לי", "חייב", medical leave → HARD
+    - "מעדיף", "עדיף", "אם אפשר", "רוצה להימנע" → SOFT
+    If strong inability is expressed → HARD.
+    If preference language is used → SOFT.
    - If time is ambiguous or cannot be resolved confidently, ask a follow-up question in assistant_reply and return constraints as [].
 
 2) schedule_query
