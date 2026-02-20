@@ -18,7 +18,7 @@ interface SendMessageResponse {
 const API_BASE = "http://localhost:3000/api";
 
 export function ChatBot() {
-  const [userId, setUserId] = useState("demo-user-2026");
+  const [userId, setUserId] = useState("e39af864-1123-4d84-bdc8-fe7518821efd");
   const [conversationId, setConversationId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ export function ChatBot() {
       setMessages(response.data.messages);
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
-        ? requestError.response?.data?.error ?? requestError.message
+        ? (requestError.response?.data?.error ?? requestError.message)
         : "Unable to load conversation";
       setError(message);
     } finally {
@@ -63,10 +63,13 @@ export function ChatBot() {
       };
       setMessages((prev) => [...prev, userMessage]);
 
-      const response = await axios.post<SendMessageResponse>(`${API_BASE}/chat`, {
-        userId: userId.trim(),
-        message: text,
-      });
+      const response = await axios.post<SendMessageResponse>(
+        `${API_BASE}/chat`,
+        {
+          userId: userId.trim(),
+          message: text,
+        },
+      );
 
       setConversationId(response.data.conversationId);
       setMessages((prev) => [
@@ -79,7 +82,7 @@ export function ChatBot() {
       ]);
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
-        ? requestError.response?.data?.error ?? requestError.message
+        ? (requestError.response?.data?.error ?? requestError.message)
         : "Unable to send message";
       setError(message);
       setMessages((prev) => prev.slice(0, -1));
@@ -109,7 +112,9 @@ export function ChatBot() {
               Start chatting to build your schedule with a futuristic 2026 vibe.
             </p>
           ) : (
-            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+            messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))
           )}
         </div>
 
