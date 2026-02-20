@@ -38,7 +38,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
   }, [draft]);
 
   return (
-    <div className="border-t border-gray-500 bg-gray-70 p-4">
+    <div className="border-t border-emerald-100 bg-white p-4">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -64,7 +64,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
             }
           }}
           rows={1}
-          placeholder="Ask anything..."
+          placeholder="Type your message..."
           maxLength={500}
           className="
             min-h-[96px]
@@ -81,7 +81,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
             transition
             focus:outline-none
             focus:ring-2
-            focus:ring-emerald-400
+            focus:ring-emerald-500
           "
           style={{ maxHeight: "120px" }}
         />
@@ -92,10 +92,10 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
           className={`
             absolute bottom-3 right-3
             grid h-10 w-10 place-items-center
-            rounded-full text-sm text-black shadow-md transition
+            rounded-full text-sm text-white shadow-md transition
             ${
               canSubmit
-                ? "bg-emerald-500 hover:bg-emerald-600"
+                ? "bg-emerald-600 hover:bg-emerald-700"
                 : "cursor-not-allowed bg-slate-300"
             }
           `}
