@@ -328,6 +328,9 @@ export const ChatService = {
     reason: string;
     sourceMessage: string;
   }) {
+    const isFullDay =
+      input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
+
     const startDate = new Date(input.startTimeIso);
     const endDate = new Date(input.endTimeIso);
 
@@ -338,9 +341,6 @@ export const ChatService = {
     if (endDate <= startDate) {
       return;
     }
-
-    const isFullDay =
-      input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
 
     const weekStart = getWeekStartSunday(startDate);
 
