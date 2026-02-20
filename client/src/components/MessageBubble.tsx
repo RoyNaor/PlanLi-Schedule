@@ -55,7 +55,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       className={`flex w-full ${isUser ? "justify-end" : "justify-start"} mb-6`}
     >
       <div
-        className={`flex items-end gap-3 max-w-[85%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
+        className={`flex items-end gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
       >
         <div className="flex-shrink-0 mb-5">
           {isUser ? (
@@ -74,7 +74,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         >
           <div
             className={`
-              px-5 py-3.5 shadow-sm text-sm
+              px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm
               ${
                 isUser
                   ? "bg-emerald-600 text-white rounded-2xl rounded-br-sm"
