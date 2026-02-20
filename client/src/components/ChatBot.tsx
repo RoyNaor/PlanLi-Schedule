@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { MessageBubble } from "./MessageBubble";
@@ -16,6 +16,12 @@ interface SendMessageResponse {
 }
 
 const API_BASE = "http://localhost:3000/api";
+const STARTER_MESSAGE: ChatMessage = {
+  id: "starter-message",
+  sender: "assistant",
+  content: `היי 👋 אני כאן כדי לעזור לך עם המשמרות השבועיות
+ספר לי מתי אתה לא זמין או אם יש לך העדפות מיוחדות.`,
+};
 
 export function ChatBot() {
   const [userId, setUserId] = useState("e39af864-1123-4d84-bdc8-fe7518821efd");
@@ -23,6 +29,11 @@ export function ChatBot() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const resetToStarterMessage = () => {
+    setMessages([{ ...STARTER_MESSAGE, id: crypto.randomUUID() }]);
+  };
 
   const loadConversation = async () => {
     if (!userId.trim()) return;
@@ -33,7 +44,11 @@ export function ChatBot() {
       const response = await axios.get<ConversationResponse>(
         `${API_BASE}/chat/${encodeURIComponent(userId.trim())}`,
       );
-      setMessages(response.data.messages);
+      if (!response.data.conversationId) {
+        throw new Error("Conversation is unavailable");
+      }
+
+      resetToStarterMessage();
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
         ? (requestError.response?.data?.error ?? requestError.message)
@@ -48,6 +63,10 @@ export function ChatBot() {
     void loadConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending]);
 
   const sendMessage = async (text: string) => {
     try {
@@ -107,6 +126,9 @@ export function ChatBot() {
               <MessageBubble key={message.id} message={message} />
             ))
           )}
+
+          {sending ? <MessageBubble typing /> : null}
+          <div ref={bottomRef} />
         </div>
 
         {error ? <p className="error-banner">{error}</p> : null}
