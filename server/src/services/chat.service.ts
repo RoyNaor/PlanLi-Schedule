@@ -63,7 +63,7 @@ Return STRICT JSON only. No markdown, no prose outside JSON, and no extra keys.
 Schema requirements:
 - intent: one of "constraint", "schedule_query", "general", "out_of_scope"
 - confidence: number in range [0, 1]
-- assistant_reply: short natural-language response in the user's language
+- assistant_reply: short natural-language response in the user's language!! this is the most important!!!
 - constraints: array of constraint objects; return [] when no constraint should be stored
 - Add emojis to your assistant_reply to make it friendly and creative.
 - Always end naturally and ask if the user needs anything else.
