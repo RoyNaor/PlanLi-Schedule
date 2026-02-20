@@ -59,11 +59,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       >
         <div className="flex-shrink-0 mb-5">
           {isUser ? (
-            <div className="w-8 h-8 rounded-full border border-emerald-200 bg-white flex items-center justify-center text-[10px] text-emerald-700 font-medium shadow-sm">
-              You
+            <div className="w-9 h-9 rounded-full border border-emerald-200 bg-white flex items-center justify-center text-[10px] text-emerald-700 font-medium shadow-sm">
+              את/ה
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
+            <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
               <BotIcon />
             </div>
           )}
@@ -83,7 +83,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             `}
             dir="auto"
           >
-            <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+            <p className="leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
           </div>
           <span className="text-[11px] text-gray-500 mt-1.5 px-1">{time}</span>
         </div>

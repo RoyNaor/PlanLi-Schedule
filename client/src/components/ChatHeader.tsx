@@ -18,7 +18,6 @@ export function ChatHeader({
           PlanLi AI
         </p>
         <h1 className="text-lg font-semibold text-gray-800">Scheduling Chat</h1>
-        <p className="text-sm text-gray-600">Simple, clear, and friendly.</p>
       </div>
 
       <form
