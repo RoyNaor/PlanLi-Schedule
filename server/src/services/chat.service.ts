@@ -339,12 +339,24 @@ export const ChatService = {
       return;
     }
 
+    const isFullDay =
+      input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
+
     const weekStart = getWeekStartSunday(startDate);
 
     await queryDatabase(
-      `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [input.userId, weekStart, startDate, endDate, input.priority, input.reason, input.sourceMessage],
+      `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message, is_full_day)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        input.userId,
+        weekStart,
+        startDate,
+        endDate,
+        input.priority,
+        input.reason,
+        input.sourceMessage,
+        isFullDay,
+      ],
     );
   },
 };
