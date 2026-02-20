@@ -34,10 +34,7 @@ interface SendMessageInput {
 interface SendMessageResult {
   conversationId: string;
   assistantText: string;
-  recapText?: string;
 }
-
-const RECAP_EVERY_USER_MESSAGES = 4;
 
 const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
 const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
@@ -52,6 +49,7 @@ const intentResponseSchema = z.object({
       start_time: z.string(),
       end_time: z.string(),
       type: constraintTypeEnum,
+      reason: z.string(),
     }),
   ),
 });
@@ -82,6 +80,8 @@ Intent rules:
     - "מעדיף", "עדיף", "אם אפשר", "רוצה להימנע" → SOFT
     If strong inability is expressed → HARD.
     If preference language is used → SOFT.
+   - reason must be a short, specific reason phrase for the same constraint window (for example: "doctor appointment", "family event", "prefers to avoid night shifts").
+   - Never copy the full user message into reason.
    - If time is ambiguous or cannot be resolved confidently, ask a follow-up question in assistant_reply and return constraints as [].
 
 2) schedule_query
@@ -98,8 +98,8 @@ Intent rules:
    - constraints must be [].
 
 JSON examples:
-{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD"}]}
-{"intent":"constraint","confidence":0.84,"assistant_reply":"Thanks 🙌 I blocked both requested windows. Need anything else?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT"}]}
+{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD","reason":"doctor appointment"}]}
+{"intent":"constraint","confidence":0.84,"assistant_reply":"Thanks 🙌 I blocked both requested windows. Need anything else?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"medical leave"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"prefers family time"}]}
 {"intent":"constraint","confidence":0.35,"assistant_reply":"I can add that, but what exact hours should I block on Tuesday? ⏰ Need anything else?","constraints":[]}
 {"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","constraints":[]}
 {"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","constraints":[]}
@@ -120,7 +120,7 @@ export const ChatService = {
   async sendMessage({ userId, message }: SendMessageInput): Promise<SendMessageResult> {
     await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
-    const userMessagesCount = await this.incrementAndGetUserMessageCount(conversationId);
+    await this.incrementAndGetUserMessageCount(conversationId);
 
     const persistedConversationMessages = await this.getMessagesByConversationId(conversationId);
     const conversationWithIncomingMessage: TranscriptMessage[] = [
@@ -149,7 +149,8 @@ export const ChatService = {
           startTimeIso: constraint.start_time,
           endTimeIso: constraint.end_time,
           priority: constraint.type,
-          reason: message,
+          reason: constraint.reason,
+          sourceMessage: message,
         });
       }
     }
@@ -162,20 +163,9 @@ export const ChatService = {
       });
     }
 
-    let recapText: string | undefined;
-    if (shouldPersistMessages && userMessagesCount > 1 && userMessagesCount % RECAP_EVERY_USER_MESSAGES === 0) {
-      recapText = await this.generateRecapMessage(conversationWithIncomingMessage);
-      await this.createMessage({
-        conversationId,
-        sender: "assistant",
-        content: recapText,
-      });
-    }
-
     return {
       conversationId,
       assistantText: intentResponse.assistant_reply,
-      recapText,
     };
   },
 
@@ -302,8 +292,9 @@ export const ChatService = {
                     start_time: { type: "string" },
                     end_time: { type: "string" },
                     type: { type: "string", enum: ["HARD", "SOFT"] },
+                    reason: { type: "string" },
                   },
-                  required: ["start_time", "end_time", "type"],
+                  required: ["start_time", "end_time", "type", "reason"],
                   additionalProperties: false,
                 },
               },
@@ -329,35 +320,13 @@ export const ChatService = {
     return parsed.data;
   },
 
-  async generateRecapMessage(messages: TranscriptMessage[]): Promise<string> {
-    const transcript = this.formatTranscript(messages);
-
-    const response = await openai.responses.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_output_tokens: 120,
-      input: [
-        {
-          role: "system",
-          content:
-            "Write a short and friendly recap of the conversation so far in the user's language. Mention key decisions and any missing details in 2-3 short sentences. Start with '🧾 Recap:' and end with a brief question.",
-        },
-        {
-          role: "user",
-          content: transcript,
-        },
-      ],
-    });
-
-    return response.output_text.trim() || "🧾 Recap: We reviewed your conversation so far. Do you want me to continue from here?";
-  },
-
   async saveConstraint(input: {
     userId: string;
     startTimeIso: string;
     endTimeIso: string;
     priority: z.infer<typeof constraintTypeEnum>;
     reason: string;
+    sourceMessage: string;
   }) {
     const startDate = new Date(input.startTimeIso);
     const endDate = new Date(input.endTimeIso);
@@ -373,9 +342,9 @@ export const ChatService = {
     const weekStart = getWeekStartSunday(startDate);
 
     await queryDatabase(
-      `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [input.userId, weekStart, startDate, endDate, input.priority, input.reason],
+      `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [input.userId, weekStart, startDate, endDate, input.priority, input.reason, input.sourceMessage],
     );
   },
 };
