@@ -1,29 +1,40 @@
-import express from "express";
-import dotenv from "dotenv";
+import "dotenv/config";
 
-dotenv.config();
+import express from "express";
+import router from "./routes.js";
+import { closeDatabasePool, checkDatabaseConnection } from "./services/database.service.js";
 
 const app = express();
 app.use(express.json());
+app.use(router);
 
 const PORT = Number(process.env.PORT ?? 3000);
 
-app.get("/", (_req, res) => {
-  res.json({ status: "Server running 🚀" });
-});
+async function start() {
+  try {
+    await checkDatabaseConnection();
+    console.log("✅ Database connection established.");
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "planli-api" });
-});
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
 
-app.get("/api/version", (_req, res) => {
-  res.json({
-    service: "server",
-    version: process.env.npm_package_version ?? "unknown",
-    node: process.version,
-  });
-});
+    async function shutdown() {
+      console.log("Shutting down server...");
+      server.close(async () => {
+        await closeDatabasePool();
+        process.exit(0);
+      });
+    }
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`❌ Failed to connect to DB: ${message}`);
+    process.exit(1);
+  }
+}
+
+start();
