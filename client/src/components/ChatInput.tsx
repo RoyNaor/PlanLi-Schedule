@@ -1,24 +1,11 @@
 import { useState, useRef, useEffect } from "react";
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { FiSend } from "react-icons/fi";
 
 interface ChatInputProps {
   onSend: (value: string) => Promise<void>;
   sending: boolean;
 }
-
-const SendIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12 19V5M5 12l7-7 7 7" />
-  </svg>
-);
 
 export function ChatInput({ onSend, sending }: ChatInputProps) {
   const [draft, setDraft] = useState("");
@@ -47,11 +34,12 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
           setDraft("");
           void onSend(text);
         }}
-        className="relative max-w-4xl mx-auto"
+        className="relative mx-auto max-w-4xl"
       >
         <textarea
           ref={textareaRef}
           value={draft}
+          dir="rtl"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -64,7 +52,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
             }
           }}
           rows={1}
-          placeholder="Type your message..."
+          placeholder="כתוב את ההודעה שלך..."
           maxLength={500}
           className="
             min-h-[78px] sm:min-h-[96px]
@@ -74,8 +62,8 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
             border border-slate-200
             bg-white
             p-4
-            pr-16
-            text-sm
+            pl-16
+            text-right text-sm
             leading-relaxed
             shadow-sm
             transition
@@ -90,7 +78,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
           type="submit"
           disabled={!canSubmit}
           className={`
-            absolute bottom-3 right-3
+            absolute bottom-3 left-3
             grid h-10 w-10 place-items-center
             rounded-full text-sm text-white shadow-md transition
             ${
@@ -99,11 +87,12 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
                 : "cursor-not-allowed bg-slate-300"
             }
           `}
+          aria-label="שלח הודעה"
         >
           {sending ? (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
           ) : (
-            <SendIcon />
+            <FiSend className="h-4 w-4" />
           )}
         </button>
       </form>
