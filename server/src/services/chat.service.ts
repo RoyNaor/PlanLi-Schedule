@@ -28,7 +28,10 @@ interface SendMessageInput {
 interface SendMessageResult {
   conversationId: string;
   assistantText: string;
+  recapText?: string;
 }
+
+const RECAP_EVERY_USER_MESSAGES = 4;
 
 const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
 const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
@@ -133,9 +136,24 @@ export const ChatService = {
       content: intentResponse.assistant_reply,
     });
 
+    const userMessagesCount = conversationMessages.filter(
+      (conversationMessage) => conversationMessage.sender === "staff",
+    ).length;
+
+    let recapText: string | undefined;
+    if (userMessagesCount > 1 && userMessagesCount % RECAP_EVERY_USER_MESSAGES === 0) {
+      recapText = await this.generateRecapMessage(conversationMessages);
+      await this.createMessage({
+        conversationId,
+        sender: "assistant",
+        content: recapText,
+      });
+    }
+
     return {
       conversationId,
       assistantText: intentResponse.assistant_reply,
+      recapText,
     };
   },
 
@@ -271,6 +289,34 @@ export const ChatService = {
     }
 
     return parsed.data;
+  },
+
+  async generateRecapMessage(messages: MessageRow[]): Promise<string> {
+    const transcript = messages
+      .map((message) => {
+        const role = message.sender === "staff" ? "User" : "Assistant";
+        return `${role}: ${message.content}`;
+      })
+      .join("\n");
+
+    const response = await openai.responses.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      max_output_tokens: 120,
+      input: [
+        {
+          role: "system",
+          content:
+            "Write a short and friendly recap of the conversation so far in the user's language. Mention key decisions and any missing details in 2-3 short sentences. Start with '🧾 Recap:' and end with a brief question.",
+        },
+        {
+          role: "user",
+          content: transcript,
+        },
+      ],
+    });
+
+    return response.output_text.trim() || "🧾 Recap: We reviewed your conversation so far. Do you want me to continue from here?";
   },
 
   async saveConstraint(input: {
