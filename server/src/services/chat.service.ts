@@ -37,13 +37,13 @@ const intentResponseSchema = z.object({
   intent: intentEnum,
   confidence: z.number().min(0).max(1),
   assistant_reply: z.string(),
-  data: z
-    .object({
+  constraints: z.array(
+    z.object({
       start_time: z.string(),
       end_time: z.string(),
       type: constraintTypeEnum,
-    })
-    .nullable(),
+    }),
+  ),
 });
 
 type IntentResponse = z.infer<typeof intentResponseSchema>;
@@ -56,15 +56,18 @@ Schema requirements:
 - intent: one of "constraint", "schedule_query", "general", "out_of_scope"
 - confidence: number in range [0, 1]
 - assistant_reply: short natural-language response in the user's language
-- data: required only for "constraint", otherwise null
+- constraints: array of constraint objects; return [] when no constraint should be stored
 - Add emojis to your assistant_reply to make it friendly and creative.
 - Always end naturally and ask if the user needs anything else.
 
 Intent rules:
 1) constraint
    - User states they cannot/should not be available at a time window.
-   - Extract data.start_time and data.end_time as ISO-8601 strings with timezone offset.
-   - Extract data.type as "HARD" or "SOFT". If unclear, default to "HARD".
+   - Extract each unavailable time window as a separate object in constraints.
+   - MUST split multiple days and/or multiple time windows into multiple constraint objects.
+   - Extract start_time and end_time as ISO-8601 strings with timezone offset.
+   - Extract type as "HARD" or "SOFT". If unclear, default to "HARD".
+   - If time is ambiguous or cannot be resolved confidently, ask a follow-up question in assistant_reply and return constraints as [].
 
 2) schedule_query
    - User asks to check, view, or inspect schedule/calendar.
@@ -77,13 +80,15 @@ Intent rules:
    - Any request unrelated to medical scheduling and availability.
    - Do NOT answer the question itself.
    - Politely explain you can only help with scheduling/availability.
-   - data must be null.
+   - constraints must be [].
 
 JSON examples:
-{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","data":{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD"}}
-{"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","data":null}
-{"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","data":null}
-{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for medical scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","data":null}`;
+{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD"}]}
+{"intent":"constraint","confidence":0.84,"assistant_reply":"Thanks 🙌 I blocked both requested windows. Need anything else?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT"}]}
+{"intent":"constraint","confidence":0.35,"assistant_reply":"I can add that, but what exact hours should I block on Tuesday? ⏰ Need anything else?","constraints":[]}
+{"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","constraints":[]}
+{"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","constraints":[]}
+{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for medical scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","constraints":[]}`;
 
 function getWeekStartSunday(input: Date): string {
   const localMidnight = new Date(input);
@@ -110,14 +115,16 @@ export const ChatService = {
     const conversationMessages = await this.getMessagesByConversationId(conversationId);
     const intentResponse = await this.generateAssistantResponse(conversationMessages);
 
-    if (intentResponse.intent === "constraint" && intentResponse.data) {
-      await this.saveConstraint({
-        userId,
-        startTimeIso: intentResponse.data.start_time,
-        endTimeIso: intentResponse.data.end_time,
-        priority: intentResponse.data.type,
-        reason: message,
-      });
+    if (intentResponse.intent === "constraint" && intentResponse.constraints.length > 0) {
+      for (const constraint of intentResponse.constraints) {
+        await this.saveConstraint({
+          userId,
+          startTimeIso: constraint.start_time,
+          endTimeIso: constraint.end_time,
+          priority: constraint.type,
+          reason: message,
+        });
+      }
     }
 
     await this.createMessage({
@@ -231,23 +238,21 @@ export const ChatService = {
               },
               confidence: { type: "number", minimum: 0, maximum: 1 },
               assistant_reply: { type: "string" },
-              data: {
-                anyOf: [
-                  {
-                    type: "object",
-                    properties: {
-                      start_time: { type: "string" },
-                      end_time: { type: "string" },
-                      type: { type: "string", enum: ["HARD", "SOFT"] },
-                    },
-                    required: ["start_time", "end_time", "type"],
-                    additionalProperties: false,
+              constraints: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    start_time: { type: "string" },
+                    end_time: { type: "string" },
+                    type: { type: "string", enum: ["HARD", "SOFT"] },
                   },
-                  { type: "null" },
-                ],
+                  required: ["start_time", "end_time", "type"],
+                  additionalProperties: false,
+                },
               },
             },
-            required: ["intent", "confidence", "assistant_reply", "data"],
+            required: ["intent", "confidence", "assistant_reply", "constraints"],
             additionalProperties: false,
           },
         },
@@ -261,14 +266,7 @@ export const ChatService = {
         confidence: 0,
         assistant_reply:
           "I can help with medical scheduling and availability 🩺📅 Please share your preferred shift or blocked time. Need anything else?",
-        data: null,
-      };
-    }
-
-    if (parsed.data.intent !== "constraint") {
-      return {
-        ...parsed.data,
-        data: null,
+        constraints: [],
       };
     }
 
