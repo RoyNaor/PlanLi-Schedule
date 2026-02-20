@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { z } from "zod";
 import { queryDatabase } from "./database.service.js";
 
 const openai = new OpenAI({
@@ -29,8 +30,75 @@ interface SendMessageResult {
   assistantText: string;
 }
 
+const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
+const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
+
+const intentResponseSchema = z.object({
+  intent: intentEnum,
+  confidence: z.number().min(0).max(1),
+  assistant_reply: z.string(),
+  data: z
+    .object({
+      start_time: z.string(),
+      end_time: z.string(),
+      type: constraintTypeEnum,
+    })
+    .nullable(),
+});
+
+type IntentResponse = z.infer<typeof intentResponseSchema>;
+
+const intentSystemPrompt = `You are an intent detection assistant for a medical scheduling chatbot.
+
+Return STRICT JSON only. No markdown, no prose outside JSON, and no extra keys.
+
+Schema requirements:
+- intent: one of "constraint", "schedule_query", "general", "out_of_scope"
+- confidence: number in range [0, 1]
+- assistant_reply: short natural-language response in the user's language
+- data: required only for "constraint", otherwise null
+- Add emojis to your assistant_reply to make it friendly and creative.
+- Always end naturally and ask if the user needs anything else.
+
+Intent rules:
+1) constraint
+   - User states they cannot/should not be available at a time window.
+   - Extract data.start_time and data.end_time as ISO-8601 strings with timezone offset.
+   - Extract data.type as "HARD" or "SOFT". If unclear, default to "HARD".
+
+2) schedule_query
+   - User asks to check, view, or inspect schedule/calendar.
+   - assistant_reply should indicate you will check the schedule.
+
+3) general
+   - Keep behavior concise and friendly, but still related to medical scheduling.
+
+4) out_of_scope
+   - Any request unrelated to medical scheduling and availability.
+   - Do NOT answer the question itself.
+   - Politely explain you can only help with scheduling/availability.
+   - data must be null.
+
+JSON examples:
+{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","data":{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD"}}
+{"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","data":null}
+{"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","data":null}
+{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for medical scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","data":null}`;
+
+function getWeekStartSunday(input: Date): string {
+  const localMidnight = new Date(input);
+  localMidnight.setHours(0, 0, 0, 0);
+  const day = localMidnight.getDay();
+  localMidnight.setDate(localMidnight.getDate() - day);
+  const year = localMidnight.getFullYear();
+  const month = String(localMidnight.getMonth() + 1).padStart(2, "0");
+  const dayOfMonth = String(localMidnight.getDate()).padStart(2, "0");
+  return `${year}-${month}-${dayOfMonth}`;
+}
+
 export const ChatService = {
   async sendMessage({ userId, message }: SendMessageInput): Promise<SendMessageResult> {
+    await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
 
     await this.createMessage({
@@ -40,21 +108,32 @@ export const ChatService = {
     });
 
     const conversationMessages = await this.getMessagesByConversationId(conversationId);
-    const assistantText = await this.generateAssistantResponse(conversationMessages);
+    const intentResponse = await this.generateAssistantResponse(conversationMessages);
+
+    if (intentResponse.intent === "constraint" && intentResponse.data) {
+      await this.saveConstraint({
+        userId,
+        startTimeIso: intentResponse.data.start_time,
+        endTimeIso: intentResponse.data.end_time,
+        priority: intentResponse.data.type,
+        reason: message,
+      });
+    }
 
     await this.createMessage({
       conversationId,
       sender: "assistant",
-      content: assistantText,
+      content: intentResponse.assistant_reply,
     });
 
     return {
       conversationId,
-      assistantText,
+      assistantText: intentResponse.assistant_reply,
     };
   },
 
   async getConversationByUserId(userId: string) {
+    await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
     const messages = await this.getMessagesByConversationId(conversationId);
 
@@ -82,6 +161,17 @@ export const ChatService = {
     return createdConversation.rows[0].id;
   },
 
+  async ensureUserExists(userId: string) {
+    const emailLocalPart = userId.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "user";
+
+    await queryDatabase(
+      `INSERT INTO users (id, email, full_name, role)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO NOTHING`,
+      [userId, `${emailLocalPart}@planli.local`, userId, "staff"],
+    );
+  },
+
   async createMessage(input: {
     conversationId: string;
     sender: Sender;
@@ -105,7 +195,7 @@ export const ChatService = {
     return result.rows;
   },
 
-  async generateAssistantResponse(messages: MessageRow[]): Promise<string> {
+  async generateAssistantResponse(messages: MessageRow[]): Promise<IntentResponse> {
     const transcript = messages
       .map((message) => {
         const role = message.sender === "staff" ? "User" : "Assistant";
@@ -115,21 +205,100 @@ export const ChatService = {
 
     const response = await openai.responses.create({
       model: "gpt-4o-mini",
-      temperature: 0.5,
-      max_output_tokens: 250,
+      temperature: 0.3,
+      max_output_tokens: 350,
       input: [
         {
           role: "system",
-          content:
-            "You are a medical scheduling assistant. Do not classify intent or extract structured intent fields. Respond naturally to the user's latest message.",
+          content: intentSystemPrompt,
         },
         {
           role: "user",
           content: transcript,
         },
       ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "chat_intent_response",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              intent: {
+                type: "string",
+                enum: ["constraint", "schedule_query", "general", "out_of_scope"],
+              },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              assistant_reply: { type: "string" },
+              data: {
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      start_time: { type: "string" },
+                      end_time: { type: "string" },
+                      type: { type: "string", enum: ["HARD", "SOFT"] },
+                    },
+                    required: ["start_time", "end_time", "type"],
+                    additionalProperties: false,
+                  },
+                  { type: "null" },
+                ],
+              },
+            },
+            required: ["intent", "confidence", "assistant_reply", "data"],
+            additionalProperties: false,
+          },
+        },
+      },
     });
 
-    return response.output_text;
+    const parsed = intentResponseSchema.safeParse(JSON.parse(response.output_text));
+    if (!parsed.success) {
+      return {
+        intent: "general",
+        confidence: 0,
+        assistant_reply:
+          "I can help with medical scheduling and availability 🩺📅 Please share your preferred shift or blocked time. Need anything else?",
+        data: null,
+      };
+    }
+
+    if (parsed.data.intent !== "constraint") {
+      return {
+        ...parsed.data,
+        data: null,
+      };
+    }
+
+    return parsed.data;
+  },
+
+  async saveConstraint(input: {
+    userId: string;
+    startTimeIso: string;
+    endTimeIso: string;
+    priority: z.infer<typeof constraintTypeEnum>;
+    reason: string;
+  }) {
+    const startDate = new Date(input.startTimeIso);
+    const endDate = new Date(input.endTimeIso);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return;
+    }
+
+    if (endDate <= startDate) {
+      return;
+    }
+
+    const weekStart = getWeekStartSunday(startDate);
+
+    await queryDatabase(
+      `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [input.userId, weekStart, startDate, endDate, input.priority, input.reason],
+    );
   },
 };
