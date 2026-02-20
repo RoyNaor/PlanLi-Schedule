@@ -38,7 +38,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
   }, [draft]);
 
   return (
-    <div className="border-t border-emerald-100 bg-white p-4">
+    <div className="border-t border-emerald-100 bg-white p-3 sm:p-4">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -67,7 +67,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
           placeholder="Type your message..."
           maxLength={500}
           className="
-            min-h-[96px]
+            min-h-[78px] sm:min-h-[96px]
             w-full
             resize-none
             rounded-2xl
