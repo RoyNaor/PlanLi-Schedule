@@ -1,7 +1,8 @@
 import type { ChatMessage } from "./types";
 
 interface MessageBubbleProps {
-  message: ChatMessage;
+  message?: ChatMessage;
+  typing?: boolean;
 }
 
 const BotIcon = () => (
@@ -46,7 +47,32 @@ function formatMessageTime(createdAt?: string) {
   });
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
+  if (typing) {
+    return (
+      <div className="flex w-full justify-start mb-6">
+        <div className="flex items-end gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] flex-row">
+          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
+            <BotIcon />
+          </div>
+          <div
+            className="px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm bg-emerald-50 border border-emerald-100 text-gray-800 rounded-2xl rounded-bl-sm typing-indicator"
+            dir="auto"
+          >
+            <span className="typing-label">כותב</span>
+            <span className="typing-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!message) return null;
+
   const isUser = message.sender === "staff";
   const time = formatMessageTime(message.created_at);
 

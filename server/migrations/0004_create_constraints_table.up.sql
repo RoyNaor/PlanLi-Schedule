@@ -6,5 +6,6 @@ CREATE TABLE constraints (
     end_time TIMESTAMP NOT NULL,
     priority VARCHAR(10) NOT NULL CHECK (priority IN ('HARD', 'SOFT')),
     reason TEXT,
+    source_message TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
