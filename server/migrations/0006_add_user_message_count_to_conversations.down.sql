@@ -1,0 +1,2 @@
+ALTER TABLE conversations
+DROP COLUMN IF EXISTS user_message_count;
