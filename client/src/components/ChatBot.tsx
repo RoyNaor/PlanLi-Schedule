@@ -13,7 +13,6 @@ interface ConversationResponse {
 interface SendMessageResponse {
   conversationId: string;
   assistantText: string;
-  recapText?: string;
 }
 
 const API_BASE = "http://localhost:3000/api";
@@ -95,15 +94,6 @@ export function ChatBot() {
           sender: "assistant",
           content: response.data.assistantText,
         },
-        ...(response.data.recapText
-          ? [
-              {
-                id: crypto.randomUUID(),
-                sender: "assistant" as const,
-                content: response.data.recapText,
-              },
-            ]
-          : []),
       ]);
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
