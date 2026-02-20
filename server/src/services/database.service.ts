@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type QueryResultRow } from "pg";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -19,12 +19,16 @@ const pool = new Pool(
     : undefined,
 );
 
+export async function queryDatabase<T extends QueryResultRow>(text: string, params: unknown[] = []) {
+  return pool.query<T>(text, params);
+}
+
 export async function checkDatabaseConnection() {
   if (!databaseUrl) {
     throw new Error("Missing DATABASE_URL environment variable.");
   }
 
-  const result = await pool.query<{ server_time: Date }>(
+  const result = await queryDatabase<{ server_time: Date }>(
     "SELECT NOW() AS server_time",
   );
 
