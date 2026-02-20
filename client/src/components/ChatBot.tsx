@@ -19,7 +19,6 @@ const API_BASE = "http://localhost:3000/api";
 
 export function ChatBot() {
   const [userId, setUserId] = useState("e39af864-1123-4d84-bdc8-fe7518821efd");
-  const [conversationId, setConversationId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -34,7 +33,6 @@ export function ChatBot() {
       const response = await axios.get<ConversationResponse>(
         `${API_BASE}/chat/${encodeURIComponent(userId.trim())}`,
       );
-      setConversationId(response.data.conversationId);
       setMessages(response.data.messages);
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
@@ -70,8 +68,6 @@ export function ChatBot() {
           message: text,
         },
       );
-
-      setConversationId(response.data.conversationId);
       setMessages((prev) => [
         ...prev,
         {
@@ -101,15 +97,10 @@ export function ChatBot() {
       />
 
       <section className="chat-card">
-        <div className="chat-meta">
-          <span>Conversation: {conversationId || "Not connected"}</span>
-          <span>{messages.length} messages</span>
-        </div>
-
         <div className="chat-log">
           {messages.length === 0 ? (
             <p className="empty-state">
-              Start chatting to build your schedule with a futuristic 2026 vibe.
+              Start chatting to build your schedule.
             </p>
           ) : (
             messages.map((message) => (
