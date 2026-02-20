@@ -20,8 +20,8 @@ const API_BASE = "http://localhost:3000/api";
 const STARTER_MESSAGE: ChatMessage = {
   id: "starter-message",
   sender: "assistant",
-  content:
-    "👋 Welcome back! I started a fresh chat view for this session. I can still use your saved history if you want to ask about past messages.",
+  content: `היי 👋 אני כאן כדי לעזור לך עם המשמרות השבועיות
+ספר לי מתי אתה לא זמין או אם יש לך העדפות מיוחדות.`,
 };
 
 export function ChatBot() {

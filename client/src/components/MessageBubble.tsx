@@ -55,8 +55,11 @@ export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
           <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
             <BotIcon />
           </div>
-          <div className="px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm bg-emerald-50 border border-emerald-100 text-gray-800 rounded-2xl rounded-bl-sm typing-indicator" dir="auto">
-            <span className="typing-label">Typing</span>
+          <div
+            className="px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm bg-emerald-50 border border-emerald-100 text-gray-800 rounded-2xl rounded-bl-sm typing-indicator"
+            dir="auto"
+          >
+            <span className="typing-label">כותב</span>
             <span className="typing-dots" aria-hidden="true">
               <i />
               <i />
