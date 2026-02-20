@@ -98,7 +98,7 @@ JSON examples:
 {"intent":"constraint","confidence":0.35,"assistant_reply":"I can add that, but what exact hours should I block on Tuesday? ⏰ Need anything else?","constraints":[]}
 {"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","constraints":[]}
 {"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","constraints":[]}
-{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for medical scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","constraints":[]}`;
+{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","constraints":[]}`;
 
 function getWeekStartSunday(input: Date): string {
   const localMidnight = new Date(input);
