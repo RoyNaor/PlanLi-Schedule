@@ -56,7 +56,7 @@ const intentResponseSchema = z.object({
 
 type IntentResponse = z.infer<typeof intentResponseSchema>;
 
-const intentSystemPrompt = `You are an intent detection assistant for a medical scheduling chatbot.
+const intentSystemPrompt = `You are an intent detection assistant for a medical scheduling chatbot response in the user's language!!.
 
 Return STRICT JSON only. No markdown, no prose outside JSON, and no extra keys.
 
