@@ -1,8 +1,8 @@
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
-import { ChatHeader } from "./ChatHeader";
-import { ChatInput } from "./ChatInput";
-import { MessageBubble } from "./MessageBubble";
+import { ChatHeader } from "./chat/ChatHeader";
+import { ChatInput } from "./chat/ChatInput";
+import { MessageBubble } from "./chat/MessageBubble";
 import type { ChatMessage } from "./types";
 
 interface ConversationResponse {
