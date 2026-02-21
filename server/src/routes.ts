@@ -12,6 +12,7 @@ import { requireAuth } from "./middleware/auth.middleware.js";
 
 const router = express.Router();
 
+// Provides a simple liveness endpoint for quick smoke checks.
 router.get("/", (_req: Request, res: Response) => {
   res.json({ status: "Server running 🚀" });
 });

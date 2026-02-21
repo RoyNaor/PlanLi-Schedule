@@ -2,10 +2,12 @@ import type { Request, Response } from "express";
 
 import { checkDatabaseConnection } from "../services/database.service.js";
 
+// Returns a lightweight service health payload for monitoring checks.
 export function getHealth(_req: Request, res: Response) {
   res.json({ ok: true, service: "planli-api" });
 }
 
+// Exposes runtime version details to simplify debugging deployments.
 export function getVersion(_req: Request, res: Response) {
   res.json({
     service: "server",
@@ -14,8 +16,10 @@ export function getVersion(_req: Request, res: Response) {
   });
 }
 
+// Validates DB connectivity and reports provider-specific status details.
 export async function getDatabaseHealth(_req: Request, res: Response) {
   try {
+    // Attempt a real query so this endpoint verifies actual DB availability.
     const result = await checkDatabaseConnection();
     console.log("✅ Database health check passed.");
 
