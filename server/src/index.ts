@@ -12,8 +12,11 @@ app.use(router);
 
 const PORT = Number(process.env.PORT ?? 3000);
 
+// Boots the API server only after confirming the database connection is healthy.
+// Also wires graceful shutdown handlers so open resources are closed safely.
 async function start() {
   try {
+    // Fail fast if we cannot reach Postgres before accepting requests.
     await checkDatabaseConnection();
     console.log("✅ Database connection established.");
 
@@ -21,6 +24,7 @@ async function start() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
 
+    // Handles process termination signals and drains the HTTP/database resources.
     async function shutdown() {
       console.log("Shutting down server...");
       server.close(async () => {

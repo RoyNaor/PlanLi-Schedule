@@ -5,10 +5,12 @@ import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
 import { AuthService } from "./services/auth.service";
 
+// Controls route-level access by reading and reacting to auth session changes.
 function App() {
   const [session, setSession] = useState(() => AuthService.getSession());
 
   useEffect(() => {
+    // Keep React state synced with sessionStorage updates from auth flows.
     const syncSession = () => {
       setSession(AuthService.getSession());
     };

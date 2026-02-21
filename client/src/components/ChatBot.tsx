@@ -24,6 +24,7 @@ const STARTER_MESSAGE: ChatMessage = {
 ספר לי מתי אתה לא זמין או אם יש לך העדפות מיוחדות.`,
 };
 
+// Coordinates chat state, API calls, and rendering of the conversation UI.
 export function ChatBot() {
   const storedSession = AuthService.getSession();
   const [sessionUser] = useState<SessionUser | null>(storedSession?.user ?? null);
@@ -34,16 +35,19 @@ export function ChatBot() {
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Resets the UI to the assistant starter message for a fresh conversation view.
   const resetToStarterMessage = () => {
     setMessages([{ ...STARTER_MESSAGE, id: crypto.randomUUID() }]);
   };
 
+  // Build auth headers once from the current session token.
   const authHeaders = storedSession?.jwtToken
     ? {
         Authorization: `Bearer ${storedSession.jwtToken}`,
       }
     : undefined;
 
+  // Loads the selected user's conversation metadata from the backend.
   const loadConversation = async () => {
     if (!userId.trim()) return;
 
@@ -60,6 +64,7 @@ export function ChatBot() {
         throw new Error("Conversation is unavailable");
       }
 
+      // Start with a clear friendly prompt after a successful load request.
       resetToStarterMessage();
     } catch (requestError) {
       const message = axios.isAxiosError(requestError)
@@ -77,9 +82,11 @@ export function ChatBot() {
   }, []);
 
   useEffect(() => {
+    // Always scroll to the latest message after updates.
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending]);
 
+  // Sends a user message, then appends assistant output when the request returns.
   const sendMessage = async (text: string) => {
     try {
       setSending(true);
@@ -90,6 +97,7 @@ export function ChatBot() {
         sender: "staff",
         content: text,
       };
+      // Optimistically render the user message for snappy UX.
       setMessages((prev) => [...prev, userMessage]);
 
       const response = await axios.post<SendMessageResponse>(
@@ -115,6 +123,7 @@ export function ChatBot() {
         ? (requestError.response?.data?.error ?? requestError.message)
         : "Unable to send message";
       setError(message);
+      // Remove the optimistic user message when send fails.
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setSending(false);
