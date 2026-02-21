@@ -255,21 +255,33 @@ export const ChatService = {
 
   async generateAssistantResponse(messages: TranscriptMessage[]): Promise<IntentResponse> {
     const transcript = this.formatTranscript(messages);
+    const now = new Date();
+const todayIso = now.toISOString();
 
-    const response = await openai.responses.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      max_output_tokens: 350,
-      input: [
-        {
-          role: "system",
-          content: intentSystemPrompt,
-        },
-        {
-          role: "user",
-          content: transcript,
-        },
-      ],
+const response = await openai.responses.create({
+  model: "gpt-4o-mini",
+  temperature: 0.3,
+  max_output_tokens: 350,
+  input: [
+    {
+      role: "system",
+      content: `${intentSystemPrompt}
+
+Current server date-time (ISO): ${todayIso}
+
+Date resolution rules:
+- All relative expressions like "today", "tomorrow", "Sunday", "next week" must be resolved relative to this date.
+- If a year is not explicitly mentioned, assume the current year.
+- If only a weekday is mentioned (e.g., "Sunday"), assume the closest upcoming occurrence.
+- Always return full ISO-8601 with timezone offset.
+- Never use past years unless explicitly stated.
+`
+    },
+    {
+      role: "user",
+      content: transcript,
+    },
+  ],
       text: {
         format: {
           type: "json_schema",
