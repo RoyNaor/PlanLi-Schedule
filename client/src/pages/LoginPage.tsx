@@ -26,14 +26,14 @@ export default function LoginPage() {
       );
       const token = await credential.user.getIdToken();
 
-      await AuthService.syncUserFromToken(
-        token,
-        credential.user.displayName ?? undefined,
-      );
+      await AuthService.validateUserFromToken(token);
 
       navigate("/chat", { replace: true });
     } catch (err: any) {
-      setError("Failed to log in. Please check your credentials.");
+      const message =
+        err?.response?.data?.error ??
+        "Failed to log in. Please check your credentials.";
+      setError(message);
       console.error(err);
     } finally {
       setSubmitting(false);
