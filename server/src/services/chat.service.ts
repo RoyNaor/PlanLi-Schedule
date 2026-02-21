@@ -105,15 +105,76 @@ JSON examples:
 {"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","constraints":[]}
 {"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","constraints":[]}`;
 
-function getWeekStartSunday(input: Date): string {
-  const localMidnight = new Date(input);
-  localMidnight.setHours(0, 0, 0, 0);
-  const day = localMidnight.getDay();
-  localMidnight.setDate(localMidnight.getDate() - day);
-  const year = localMidnight.getFullYear();
-  const month = String(localMidnight.getMonth() + 1).padStart(2, "0");
-  const dayOfMonth = String(localMidnight.getDate()).padStart(2, "0");
-  return `${year}-${month}-${dayOfMonth}`;
+const ISRAEL_TIME_ZONE = "Asia/Jerusalem";
+
+function toIsraelDateParts(input: Date): { year: number; month: number; day: number; weekday: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ISRAEL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(input);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
+  const day = Number(parts.find((part) => part.type === "day")?.value ?? "0");
+  const weekdayShort = parts.find((part) => part.type === "weekday")?.value;
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+
+  return {
+    year,
+    month,
+    day,
+    weekday: weekdayMap[weekdayShort ?? "Sun"] ?? 0,
+  };
+}
+
+function formatIsraelNowIso(input: Date): string {
+  const datePart = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: ISRAEL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(input);
+
+  const timePart = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ISRAEL_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(input);
+
+  const timeZoneName = new Intl.DateTimeFormat("en-US", {
+    timeZone: ISRAEL_TIME_ZONE,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(input)
+    .find((part) => part.type === "timeZoneName")
+    ?.value?.replace("GMT", "")
+    ?.replace(/^([+-]\d{1,2})$/, "$1:00");
+
+  return `${datePart}T${timePart}${timeZoneName ?? "+02:00"}`;
+}
+
+function getWeekStartSundayInIsrael(dateInput: Date): string {
+  const dateParts = toIsraelDateParts(dateInput);
+  const utcNoonForIsraelDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 12, 0, 0));
+  utcNoonForIsraelDate.setUTCDate(utcNoonForIsraelDate.getUTCDate() - dateParts.weekday);
+
+  const sundayParts = toIsraelDateParts(utcNoonForIsraelDate);
+  const month = String(sundayParts.month).padStart(2, "0");
+  const day = String(sundayParts.day).padStart(2, "0");
+  return `${sundayParts.year}-${month}-${day}`;
 }
 
 export const ChatService = {
@@ -256,32 +317,36 @@ export const ChatService = {
   async generateAssistantResponse(messages: TranscriptMessage[]): Promise<IntentResponse> {
     const transcript = this.formatTranscript(messages);
     const now = new Date();
-const todayIso = now.toISOString();
+    const israelNowIso = formatIsraelNowIso(now);
+    const israelNowParts = toIsraelDateParts(now);
 
-const response = await openai.responses.create({
-  model: "gpt-4o-mini",
-  temperature: 0.3,
-  max_output_tokens: 350,
-  input: [
-    {
-      role: "system",
-      content: `${intentSystemPrompt}
+    const response = await openai.responses.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      max_output_tokens: 350,
+      input: [
+        {
+          role: "system",
+          content: `${intentSystemPrompt}
 
-Current server date-time (ISO): ${todayIso}
+Current Israel date-time (ISO, Asia/Jerusalem): ${israelNowIso}
+Current Israel year: ${israelNowParts.year}
 
 Date resolution rules:
-- All relative expressions like "today", "tomorrow", "Sunday", "next week" must be resolved relative to this date.
-- If a year is not explicitly mentioned, assume the current year.
-- If only a weekday is mentioned (e.g., "Sunday"), assume the closest upcoming occurrence.
+- Always resolve dates in Israel timezone (Asia/Jerusalem).
+- Treat Sunday as the first day of the week.
+- All relative expressions like "today", "tomorrow", "Sunday", "next week" must be resolved relative to Israel date-time above.
+- If a year is not explicitly mentioned, assume the current Israel year.
+- If only a weekday is mentioned (e.g., "Sunday"), assume the closest upcoming occurrence in Israel time.
 - Always return full ISO-8601 with timezone offset.
 - Never use past years unless explicitly stated.
 `
-    },
-    {
-      role: "user",
-      content: transcript,
-    },
-  ],
+        },
+        {
+          role: "user",
+          content: transcript,
+        },
+      ],
       text: {
         format: {
           type: "json_schema",
@@ -340,6 +405,14 @@ Date resolution rules:
     reason: string;
     sourceMessage: string;
   }) {
+    console.log("[ChatService.saveConstraint] Preparing to save constraint", {
+      userId: input.userId,
+      startTimeIso: input.startTimeIso,
+      endTimeIso: input.endTimeIso,
+      priority: input.priority,
+      reason: input.reason,
+    });
+
     const isFullDay =
       input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
 
@@ -347,14 +420,29 @@ Date resolution rules:
     const endDate = new Date(input.endTimeIso);
 
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      console.warn("[ChatService.saveConstraint] Skipping constraint due to invalid date", {
+        startTimeIso: input.startTimeIso,
+        endTimeIso: input.endTimeIso,
+      });
       return;
     }
 
     if (endDate <= startDate) {
+      console.warn("[ChatService.saveConstraint] Skipping constraint because end <= start", {
+        startTimeIso: input.startTimeIso,
+        endTimeIso: input.endTimeIso,
+      });
       return;
     }
 
-    const weekStart = getWeekStartSunday(startDate);
+    const weekStart = getWeekStartSundayInIsrael(startDate);
+
+    console.log("[ChatService.saveConstraint] Computed values before DB insert", {
+      weekStart,
+      startIsoForDb: input.startTimeIso,
+      endIsoForDb: input.endTimeIso,
+      isFullDay,
+    });
 
     await queryDatabase(
       `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message, is_full_day)
@@ -362,8 +450,8 @@ Date resolution rules:
       [
         input.userId,
         weekStart,
-        startDate,
-        endDate,
+        input.startTimeIso,
+        input.endTimeIso,
         input.priority,
         input.reason,
         input.sourceMessage,
