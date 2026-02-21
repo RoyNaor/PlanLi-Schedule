@@ -1,22 +1,42 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Lock, Mail } from "lucide-react";
+import { auth } from "../firebase";
+import { AuthService } from "../services/auth.service";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     try {
-      await login(email, password);
-      navigate("/");
+      setSubmitting(true);
+      setError("");
+
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password,
+      );
+      const token = await credential.user.getIdToken();
+
+      await AuthService.syncUserFromToken(
+        token,
+        credential.user.displayName ?? undefined,
+      );
+
+      navigate("/chat", { replace: true });
     } catch (err: any) {
       setError("Failed to log in. Please check your credentials.");
       console.error(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -71,6 +91,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
+            disabled={submitting}
             className="w-full bg-emerald-600 text-white py-2 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
           >
             Sign In
