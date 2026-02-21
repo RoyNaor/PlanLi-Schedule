@@ -430,13 +430,6 @@ Date resolution rules:
 
     const weekStart = getWeekStartSundayInIsrael(startDate);
 
-    console.log("[ChatService.saveConstraint] Computed values before DB insert", {
-      weekStart,
-      startIsoForDb: input.startTimeIso,
-      endIsoForDb: input.endTimeIso,
-      isFullDay,
-    });
-
     await queryDatabase(
       `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message, is_full_day)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
