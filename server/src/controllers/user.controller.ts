@@ -1,21 +1,8 @@
 import type { Request, Response } from "express";
-import z from "zod";
 import { UserService } from "../services/user.service.js";
-
-const syncUserSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required").optional(),
-  role: z.string().trim().min(1).max(50).optional(),
-  phone: z.string().trim().min(3).max(20).optional(),
-});
 
 export const userController = {
   async syncAuthenticatedUser(req: Request, res: Response) {
-    const parsed = syncUserSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-      return res.status(400).json(parsed.error.format());
-    }
-
     if (!req.authUser?.uid) {
       return res.status(401).json({ error: "Missing authenticated user" });
     }
@@ -25,18 +12,21 @@ export const userController = {
     }
 
     try {
-      const user = await UserService.upsertUser({
-        id: req.authUser.uid,
-        email: req.authUser.email,
-        fullName: parsed.data.fullName ?? req.authUser.name ?? req.authUser.email,
-        role: parsed.data.role,
-        phone: parsed.data.phone,
-      });
+      const user = await UserService.getUserByIdOrEmail(
+        req.authUser.uid,
+        req.authUser.email,
+      );
+
+      if (!user) {
+        return res.status(403).json({
+          error: "This account is not provisioned yet. Please contact an administrator.",
+        });
+      }
 
       return res.status(200).json({ user });
     } catch (error) {
-      console.error("Error syncing user:", error);
-      return res.status(500).json({ error: "Failed to sync authenticated user" });
+      console.error("Error validating user session:", error);
+      return res.status(500).json({ error: "Failed to validate authenticated user" });
     }
   },
 

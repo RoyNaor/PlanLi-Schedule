@@ -13,7 +13,7 @@ interface StoredSession {
   user: SessionUser;
 }
 
-interface SyncUserResponse {
+interface ValidateUserResponse {
   user: SessionUser;
 }
 
@@ -27,6 +27,7 @@ const SESSION_KEY = "planli.session";
 export const AuthService = {
   saveSession(session: StoredSession) {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    window.dispatchEvent(new Event("planli:session-changed"));
   },
 
   getSession(): StoredSession | null {
@@ -40,18 +41,20 @@ export const AuthService = {
       return JSON.parse(raw) as StoredSession;
     } catch {
       sessionStorage.removeItem(SESSION_KEY);
+      window.dispatchEvent(new Event("planli:session-changed"));
       return null;
     }
   },
 
   clearSession() {
     sessionStorage.removeItem(SESSION_KEY);
+    window.dispatchEvent(new Event("planli:session-changed"));
   },
 
-  async syncUserFromToken(token: string, fullName?: string): Promise<StoredSession> {
-    const response = await axios.post<SyncUserResponse>(
+  async validateUserFromToken(token: string): Promise<StoredSession> {
+    const response = await axios.post<ValidateUserResponse>(
       `${API_BASE}/users/sync`,
-      { fullName },
+      {},
       {
         headers: {
           Authorization: `Bearer ${token}`,
