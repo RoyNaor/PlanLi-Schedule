@@ -1,12 +1,15 @@
 interface ChatHeaderProps {
   userId: string;
+  displayName?: string;
   onUserIdChange: (value: string) => void;
   onLoadConversation: () => Promise<void>;
   loading: boolean;
 }
 
+// Renders chat identity context and a control to load a specific user's conversation.
 export function ChatHeader({
   userId,
+  displayName,
   onUserIdChange,
   onLoadConversation,
   loading,
@@ -18,6 +21,9 @@ export function ChatHeader({
           PlanLi AI
         </p>
         <h1 className="text-lg font-semibold text-gray-800">Scheduling Chat</h1>
+        {displayName ? (
+          <p className="text-sm text-gray-500">Signed in as {displayName}</p>
+        ) : null}
       </div>
 
       <form
