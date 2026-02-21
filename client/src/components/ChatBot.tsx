@@ -4,6 +4,7 @@ import { ChatHeader } from "./chat/ChatHeader";
 import { ChatInput } from "./chat/ChatInput";
 import { MessageBubble } from "./chat/MessageBubble";
 import type { ChatMessage } from "./types";
+import { AuthService, type SessionUser } from "../services/auth.service";
 
 interface ConversationResponse {
   conversationId: string;
@@ -24,7 +25,11 @@ const STARTER_MESSAGE: ChatMessage = {
 };
 
 export function ChatBot() {
-  const [userId, setUserId] = useState("e39af864-1123-4d84-bdc8-fe7518821efd");
+  const storedSession = AuthService.getSession();
+  const [sessionUser] = useState<SessionUser | null>(storedSession?.user ?? null);
+  const [userId, setUserId] = useState(
+    storedSession?.user.id ?? "e39af864-1123-4d84-bdc8-fe7518821efd",
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -35,6 +40,12 @@ export function ChatBot() {
     setMessages([{ ...STARTER_MESSAGE, id: crypto.randomUUID() }]);
   };
 
+  const authHeaders = storedSession?.jwtToken
+    ? {
+        Authorization: `Bearer ${storedSession.jwtToken}`,
+      }
+    : undefined;
+
   const loadConversation = async () => {
     if (!userId.trim()) return;
 
@@ -43,6 +54,9 @@ export function ChatBot() {
       setError("");
       const response = await axios.get<ConversationResponse>(
         `${API_BASE}/chat/${encodeURIComponent(userId.trim())}`,
+        {
+          headers: authHeaders,
+        },
       );
       if (!response.data.conversationId) {
         throw new Error("Conversation is unavailable");
@@ -86,6 +100,9 @@ export function ChatBot() {
           userId: userId.trim(),
           message: text,
         },
+        {
+          headers: authHeaders,
+        },
       );
       setMessages((prev) => [
         ...prev,
@@ -110,6 +127,7 @@ export function ChatBot() {
     <main className="chat-shell">
       <ChatHeader
         userId={userId}
+        displayName={sessionUser?.fullName}
         onUserIdChange={setUserId}
         onLoadConversation={loadConversation}
         loading={loading}
