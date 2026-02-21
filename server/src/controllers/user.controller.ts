@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { UserService } from "../services/user.service.js";
 
 export const userController = {
+  // Ensures the authenticated token maps to a provisioned user in the app DB.
   async syncAuthenticatedUser(req: Request, res: Response) {
     if (!req.authUser?.uid) {
       return res.status(401).json({ error: "Missing authenticated user" });
@@ -12,6 +13,7 @@ export const userController = {
     }
 
     try {
+      // Prefer direct id lookup but allow email fallback for migrated accounts.
       const user = await UserService.getUserByIdOrEmail(
         req.authUser.uid,
         req.authUser.email,
@@ -30,6 +32,7 @@ export const userController = {
     }
   },
 
+  // Returns the currently authenticated user's profile record.
   async getAuthenticatedUser(req: Request, res: Response) {
     if (!req.authUser?.uid) {
       return res.status(401).json({ error: "Missing authenticated user" });

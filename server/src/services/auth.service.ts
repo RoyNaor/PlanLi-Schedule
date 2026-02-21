@@ -11,6 +11,7 @@ interface JwtPayload {
   name?: string;
 }
 
+// Decodes the middle JWT segment into a typed payload without signature validation.
 function decodeJwtPayload(token: string): JwtPayload {
   const parts = token.split(".");
 
@@ -24,6 +25,7 @@ function decodeJwtPayload(token: string): JwtPayload {
     throw new Error("JWT payload is missing");
   }
 
+  // Pad JWT-safe base64 to a valid length before decoding.
   const paddedBase64 = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
   const decoded = Buffer.from(paddedBase64, "base64").toString("utf8");
 
@@ -31,6 +33,7 @@ function decodeJwtPayload(token: string): JwtPayload {
 }
 
 export const AuthService = {
+  // Pulls the token value out of a standard "Bearer <token>" auth header.
   parseBearerToken(authorizationHeader?: string): string {
     if (!authorizationHeader) {
       throw new Error("Missing Authorization header");
@@ -45,6 +48,7 @@ export const AuthService = {
     return token;
   },
 
+  // Converts raw JWT claims into the app's normalized authenticated user shape.
   extractUserFromToken(token: string): AuthenticatedUser {
     const payload = decodeJwtPayload(token);
     const uid = payload.sub ?? payload.user_id;

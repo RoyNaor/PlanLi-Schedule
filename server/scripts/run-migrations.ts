@@ -11,6 +11,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Creates the migrations bookkeeping table when it does not exist yet.
 async function ensureMigrationsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS migrations (
@@ -21,22 +22,25 @@ async function ensureMigrationsTable() {
   `);
 }
 
+// Returns a set of migration filenames that already ran successfully.
 async function getExecutedMigrations(): Promise<Set<string>> {
   const result = await pool.query("SELECT filename FROM migrations;");
-  return new Set(result.rows.map(r => r.filename));
+  return new Set(result.rows.map((r) => r.filename));
 }
 
+// Executes pending .up.sql files in filename order inside DB transactions.
 async function runMigrations() {
   const migrationsDir = path.join(__dirname, "..", "migrations");
 
   const files = fs
     .readdirSync(migrationsDir)
-    .filter(file => file.endsWith(".up.sql"))
+    .filter((file) => file.endsWith(".up.sql"))
     .sort();
 
   const executed = await getExecutedMigrations();
 
   for (const file of files) {
+    // Skip work that is already recorded in the migrations table.
     if (executed.has(file)) {
       console.log(`⏭ Skipping ${file}`);
       continue;
@@ -50,10 +54,7 @@ async function runMigrations() {
     await pool.query("BEGIN");
     try {
       await pool.query(sql);
-      await pool.query(
-        "INSERT INTO migrations (filename) VALUES ($1)",
-        [file]
-      );
+      await pool.query("INSERT INTO migrations (filename) VALUES ($1)", [file]);
       await pool.query("COMMIT");
       console.log(`✅ Done ${file}`);
     } catch (err) {
@@ -64,6 +65,7 @@ async function runMigrations() {
   }
 }
 
+// Entry point that runs migrations and always closes the DB pool.
 async function main() {
   try {
     await ensureMigrationsTable();
@@ -74,4 +76,4 @@ async function main() {
   }
 }
 
-main();
+void main();

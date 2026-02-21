@@ -5,6 +5,7 @@ import { Lock, Mail } from "lucide-react";
 import { auth } from "../firebase";
 import { AuthService } from "../services/auth.service";
 
+// Handles sign-in with Firebase and then syncs the authenticated user with backend.
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
+  // Submits credentials, stores the session, and redirects to the chat page.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 

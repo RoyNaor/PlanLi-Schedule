@@ -9,6 +9,7 @@ declare global {
   }
 }
 
+// Extracts bearer auth data and attaches the parsed user identity to the request.
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const token = AuthService.parseBearerToken(req.header("authorization"));
