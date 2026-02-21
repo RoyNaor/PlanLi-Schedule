@@ -405,13 +405,6 @@ Date resolution rules:
     reason: string;
     sourceMessage: string;
   }) {
-    console.log("[ChatService.saveConstraint] Preparing to save constraint", {
-      userId: input.userId,
-      startTimeIso: input.startTimeIso,
-      endTimeIso: input.endTimeIso,
-      priority: input.priority,
-      reason: input.reason,
-    });
 
     const isFullDay =
       input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
