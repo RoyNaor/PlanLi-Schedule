@@ -19,10 +19,12 @@ const pool = new Pool(
     : undefined,
 );
 
+// Runs a parameterized query against the shared Postgres pool.
 export async function queryDatabase<T extends QueryResultRow>(text: string, params: unknown[] = []) {
   return pool.query<T>(text, params);
 }
 
+// Performs a simple DB ping query and returns normalized health payload data.
 export async function checkDatabaseConnection() {
   if (!databaseUrl) {
     throw new Error("Missing DATABASE_URL environment variable.");
@@ -38,6 +40,7 @@ export async function checkDatabaseConnection() {
   };
 }
 
+// Closes all DB connections in the pool, typically during process shutdown.
 export async function closeDatabasePool() {
   await pool.end();
 }

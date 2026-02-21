@@ -7,14 +7,15 @@ interface ChatInputProps {
   sending: boolean;
 }
 
+// Captures user text input and triggers send actions from keyboard or button.
 export function ChatInput({ onSend, sending }: ChatInputProps) {
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canSubmit = draft.trim().length > 0 && !sending;
 
-  // Auto resize
   useEffect(() => {
+    // Auto-resize textarea to match content while keeping a max height.
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${Math.min(
@@ -42,6 +43,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
           dir="rtl"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            // Enter sends; Shift+Enter inserts a newline.
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               if (canSubmit) {
