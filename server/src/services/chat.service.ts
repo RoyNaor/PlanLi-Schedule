@@ -107,6 +107,7 @@ JSON examples:
 
 const ISRAEL_TIME_ZONE = "Asia/Jerusalem";
 
+// Extracts Israel-local calendar parts from a Date for deterministic date math.
 function toIsraelDateParts(input: Date): { year: number; month: number; day: number; weekday: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: ISRAEL_TIME_ZONE,
@@ -138,6 +139,7 @@ function toIsraelDateParts(input: Date): { year: number; month: number; day: num
   };
 }
 
+// Formats the current Israel-local date-time as ISO including UTC offset.
 function formatIsraelNowIso(input: Date): string {
   const datePart = new Intl.DateTimeFormat("sv-SE", {
     timeZone: ISRAEL_TIME_ZONE,
@@ -166,6 +168,7 @@ function formatIsraelNowIso(input: Date): string {
   return `${datePart}T${timePart}${timeZoneName ?? "+02:00"}`;
 }
 
+// Calculates the local week-start date (Sunday) in Israel timezone.
 function getWeekStartSundayInIsrael(dateInput: Date): string {
   const dateParts = toIsraelDateParts(dateInput);
   const utcNoonForIsraelDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 12, 0, 0));
@@ -178,6 +181,7 @@ function getWeekStartSundayInIsrael(dateInput: Date): string {
 }
 
 export const ChatService = {
+  // Persists a user message, asks the model for intent, stores constraints, and saves reply.
   async sendMessage({ userId, message }: SendMessageInput): Promise<SendMessageResult> {
     await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
@@ -230,6 +234,7 @@ export const ChatService = {
     };
   },
 
+  // Loads a conversation and all message rows for a given user id.
   async getConversationByUserId(userId: string) {
     await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
@@ -241,6 +246,7 @@ export const ChatService = {
     };
   },
 
+  // Reuses an existing conversation or creates one if this user has none.
   async getOrCreateConversation(userId: string): Promise<string> {
     const existingConversation = await queryDatabase<ConversationRow>(
       "SELECT id, user_message_count FROM conversations WHERE user_id = $1 LIMIT 1",
@@ -259,6 +265,7 @@ export const ChatService = {
     return createdConversation.rows[0].id;
   },
 
+  // Increments and returns the number of staff messages in the conversation.
   async incrementAndGetUserMessageCount(conversationId: string): Promise<number> {
     const result = await queryDatabase<ConversationRow>(
       `UPDATE conversations
@@ -271,6 +278,7 @@ export const ChatService = {
     return result.rows[0]?.user_message_count ?? 1;
   },
 
+  // Creates a placeholder user row so chat inserts never fail on FK constraints.
   async ensureUserExists(userId: string) {
     const emailLocalPart = userId.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "user";
 
@@ -282,6 +290,7 @@ export const ChatService = {
     );
   },
 
+  // Inserts a single message row into the messages table.
   async createMessage(input: {
     conversationId: string;
     sender: Sender;
@@ -293,6 +302,7 @@ export const ChatService = {
     );
   },
 
+  // Returns conversation messages sorted in chronological order.
   async getMessagesByConversationId(conversationId: string): Promise<MessageRow[]> {
     const result = await queryDatabase<MessageRow>(
       `SELECT id, conversation_id, sender, content, created_at
@@ -305,6 +315,7 @@ export const ChatService = {
     return result.rows;
   },
 
+  // Converts chat history into a plain transcript consumed by the model prompt.
   formatTranscript(messages: TranscriptMessage[]): string {
     return messages
       .map((message) => {
@@ -314,12 +325,14 @@ export const ChatService = {
       .join("\n");
   },
 
+  // Calls OpenAI with strict JSON schema output to classify intent and extract constraints.
   async generateAssistantResponse(messages: TranscriptMessage[]): Promise<IntentResponse> {
     const transcript = this.formatTranscript(messages);
     const now = new Date();
     const israelNowIso = formatIsraelNowIso(now);
     const israelNowParts = toIsraelDateParts(now);
 
+    // Ask the model for structured output so parsing stays deterministic.
     const response = await openai.responses.create({
       model: "gpt-4o-mini",
       temperature: 0.3,
@@ -383,6 +396,7 @@ Date resolution rules:
       },
     });
 
+    // Fallback to a safe generic response when model output does not match schema.
     const parsed = intentResponseSchema.safeParse(JSON.parse(response.output_text));
     if (!parsed.success) {
       return {
@@ -397,6 +411,7 @@ Date resolution rules:
     return parsed.data;
   },
 
+  // Validates and stores a parsed availability constraint for scheduling logic.
   async saveConstraint(input: {
     userId: string;
     startTimeIso: string;
@@ -406,6 +421,7 @@ Date resolution rules:
     sourceMessage: string;
   }) {
 
+    // Mark full-day blocks so downstream schedulers can handle them differently.
     const isFullDay =
       input.startTimeIso.includes("T00:00:00") && input.endTimeIso.includes("T23:59:59");
 
@@ -428,6 +444,7 @@ Date resolution rules:
       return;
     }
 
+    // Persist the Israel-local week anchor for weekly planning queries.
     const weekStart = getWeekStartSundayInIsrael(startDate);
 
     await queryDatabase(

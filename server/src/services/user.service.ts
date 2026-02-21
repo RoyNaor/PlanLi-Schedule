@@ -18,6 +18,7 @@ export interface UserProfile {
   phone: string | null;
 }
 
+// Maps raw DB column names to the API-friendly user profile shape.
 function mapUser(row: UserRow): UserProfile {
   return {
     id: row.id,
@@ -29,6 +30,7 @@ function mapUser(row: UserRow): UserProfile {
 }
 
 export const UserService = {
+  // Fetches a user profile using the primary key identifier.
   async getUserById(userId: string): Promise<UserProfile | null> {
     const result = await queryDatabase<UserRow>(
       `SELECT id, email, full_name, role, phone, created_at, updated_at
@@ -41,6 +43,7 @@ export const UserService = {
     return row ? mapUser(row) : null;
   },
 
+  // Finds a user by case-insensitive email address for auth compatibility.
   async getUserByEmail(email: string): Promise<UserProfile | null> {
     const result = await queryDatabase<UserRow>(
       `SELECT id, email, full_name, role, phone, created_at, updated_at
@@ -54,6 +57,7 @@ export const UserService = {
     return row ? mapUser(row) : null;
   },
 
+  // Resolves a user by id first, then falls back to email if needed.
   async getUserByIdOrEmail(userId: string, email: string): Promise<UserProfile | null> {
     const byId = await this.getUserById(userId);
 

@@ -5,6 +5,7 @@ interface MessageBubbleProps {
   typing?: boolean;
 }
 
+// Draws the assistant avatar used by message and typing bubbles.
 const BotIcon = () => (
   <svg
     width="18"
@@ -26,6 +27,7 @@ const BotIcon = () => (
   </svg>
 );
 
+// Formats the timestamp shown below each message bubble.
 function formatMessageTime(createdAt?: string) {
   if (!createdAt) {
     return new Date().toLocaleTimeString([], {
@@ -47,6 +49,7 @@ function formatMessageTime(createdAt?: string) {
   });
 }
 
+// Renders either a typing indicator or a styled message bubble row.
 export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
   if (typing) {
     return (

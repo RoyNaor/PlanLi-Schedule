@@ -16,7 +16,9 @@ const userParamsSchema = z.object({
 });
 
 export const chatController = {
+  // Validates and stores a user message, then returns the assistant response.
   async sendMessage(req: Request, res: Response) {
+    // Validate payload shape before any side effects occur.
     const parsed = sendMessageSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -45,7 +47,9 @@ export const chatController = {
     }
   },
 
+  // Fetches full conversation history for the provided user identifier.
   async getConversation(req: Request, res: Response) {
+    // Validate route params to avoid malformed DB queries.
     const parsed = userParamsSchema.safeParse(req.params);
 
     if (!parsed.success) {

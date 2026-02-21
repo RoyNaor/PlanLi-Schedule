@@ -15,7 +15,8 @@ export const firebaseConfig: FirebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID ?? "",
 };
 
-
+// Bootstraps the Firebase app once so modules can share a singleton instance.
 const app = initializeApp(firebaseConfig);
 
+// Exposes the Firebase Auth client used by login-related flows.
 export const auth = getAuth(app);

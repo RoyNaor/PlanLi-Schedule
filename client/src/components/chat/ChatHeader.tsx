@@ -6,6 +6,7 @@ interface ChatHeaderProps {
   loading: boolean;
 }
 
+// Renders chat identity context and a control to load a specific user's conversation.
 export function ChatHeader({
   userId,
   displayName,
