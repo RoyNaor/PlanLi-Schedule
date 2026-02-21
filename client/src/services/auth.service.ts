@@ -17,6 +17,10 @@ interface SyncUserResponse {
   user: SessionUser;
 }
 
+interface MeResponse {
+  user: SessionUser;
+}
+
 const API_BASE = "http://localhost:3000/api";
 const SESSION_KEY = "planli.session";
 
@@ -62,5 +66,15 @@ export const AuthService = {
 
     this.saveSession(session);
     return session;
+  },
+
+  async getAuthenticatedUser(token: string): Promise<SessionUser> {
+    const response = await axios.get<MeResponse>(`${API_BASE}/users/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    return response.data.user;
   },
 };
