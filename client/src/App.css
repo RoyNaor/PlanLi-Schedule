@@ -17,6 +17,17 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+.app-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  position: relative;
+}
+
+.app-content {
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: clamp(0.75rem, 3vw, 2rem);
@@ -27,6 +38,85 @@ body {
   display: grid;
   gap: clamp(0.75rem, 2vw, 1rem);
   direction: ltr;
+}
+
+.app-sidebar {
+  background: linear-gradient(180deg, #0f172a 0%, #111827 65%, #1f2937 100%);
+  color: #e5e7eb;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  box-shadow: -10px 0 26px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-brand {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #34d399;
+  margin-bottom: 0.4rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.sidebar-link,
+.sidebar-auth {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #e5e7eb;
+  border-radius: 12px;
+  padding: 0.75rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font: inherit;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.sidebar-link:hover,
+.sidebar-auth:hover {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.sidebar-link.is-active {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: rgba(52, 211, 153, 0.42);
+  color: #ecfdf5;
+}
+
+.sidebar-auth {
+  margin-top: auto;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.burger-toggle {
+  position: fixed;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  color: #111827;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 35;
+  box-shadow: 0 7px 20px rgba(15, 23, 42, 0.15);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.44);
+  z-index: 25;
 }
 
 .chat-card {
@@ -48,6 +138,35 @@ body {
 }
 
 @media (max-width: 640px) {
+  .app-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .burger-toggle {
+    display: inline-flex;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(78vw, 300px);
+    transform: translateX(110%);
+    opacity: 0;
+    z-index: 30;
+    transition: transform 320ms cubic-bezier(0.19, 1, 0.22, 1), opacity 220ms;
+  }
+
+  .app-sidebar.is-open {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  .app-content {
+    padding: 3.6rem 0.65rem 0.75rem;
+  }
+
   .chat-card {
     border-radius: 14px;
   }
