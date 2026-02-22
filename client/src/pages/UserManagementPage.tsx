@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
-import { Plus, User as UserIcon, Users, Stethoscope } from "lucide-react";
+import {
+  Check,
+  Pencil,
+  Plus,
+  Stethoscope,
+  Trash2,
+  User as UserIcon,
+  Users,
+  X,
+} from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
 interface UserData {
@@ -12,6 +21,13 @@ interface UserData {
   phone: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+interface EditFormData {
+  email: string;
+  full_name: string;
+  role: string;
+  phone: string;
 }
 
 const API_BASE = "http://localhost:3000/api";
@@ -26,24 +42,33 @@ const formatRoleLabel = (role: string) => {
   return roleMap[role] ?? role;
 };
 
+const defaultAddForm = {
+  email: "",
+  password: "",
+  full_name: "",
+  role: "doctor",
+  phone: "",
+};
+
 export default function UserManagementPage() {
   const session = useMemo(() => AuthService.getSession(), []);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(defaultAddForm);
+  const [editForm, setEditForm] = useState<EditFormData>({
     email: "",
-    password: "",
     full_name: "",
     role: "doctor",
     phone: "",
   });
 
   const fetchUsers = useCallback(async () => {
-    if (!session) {
-      return;
-    }
+    if (!session) return;
 
     try {
       setLoading(true);
@@ -57,7 +82,7 @@ export default function UserManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [session?.jwtToken]);
+  }, [session]);
 
   useEffect(() => {
     void fetchUsers();
@@ -79,10 +104,7 @@ export default function UserManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!session) {
-      return;
-    }
+    if (!session) return;
 
     try {
       const payload = {
@@ -94,16 +116,9 @@ export default function UserManagementPage() {
         headers: { Authorization: `Bearer ${session.jwtToken}` },
       });
 
-      alert("User added successfully!");
       setShowAddForm(false);
-      setFormData({
-        email: "",
-        password: "",
-        full_name: "",
-        role: "doctor",
-        phone: "",
-      });
-
+      setFormData(defaultAddForm);
+      setShowSuccessModal(true);
       void fetchUsers();
     } catch (error: any) {
       console.error("Error adding user:", error);
@@ -112,18 +127,64 @@ export default function UserManagementPage() {
     }
   };
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
+  const openEditModal = (user: UserData) => {
+    setEditingUser(user);
+    setEditForm({
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      phone: user.phone ?? "",
+    });
+  };
 
-  if (session.user.role !== "admin") {
-    return <Navigate to="/chat" replace />;
-  }
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session || !editingUser) return;
+
+    try {
+      await axios.put(
+        `${API_BASE}/users/${editingUser.id}`,
+        {
+          email: editForm.email,
+          full_name: editForm.full_name,
+          role: editForm.role,
+          phone: editForm.phone.trim() === "" ? null : editForm.phone.trim(),
+        },
+        { headers: { Authorization: `Bearer ${session.jwtToken}` } },
+      );
+
+      setEditingUser(null);
+      void fetchUsers();
+    } catch (error: any) {
+      console.error("Error updating user:", error);
+      const msg = error.response?.data?.error || "Failed to update user";
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!session || !userToDelete) return;
+
+    try {
+      await axios.delete(`${API_BASE}/users/${userToDelete.id}`, {
+        headers: { Authorization: `Bearer ${session.jwtToken}` },
+      });
+
+      setUserToDelete(null);
+      void fetchUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      const msg = error.response?.data?.error || "Failed to delete user";
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  if (!session) return <Navigate to="/login" replace />;
+  if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">ניהול משתמשים</h1>
@@ -139,7 +200,6 @@ export default function UserManagementPage() {
           </button>
         </div>
 
-        {/* Analytics */}
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
           <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -164,25 +224,17 @@ export default function UserManagementPage() {
           {Object.entries(analytics.roleCounts)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([role, count]) => (
-              <article
-                key={role}
-                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
-              >
+              <article key={role} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <p className="text-sm text-slate-500">{formatRoleLabel(role)}</p>
                 <p className="text-3xl font-semibold text-slate-900 mt-3">{count}</p>
               </article>
             ))}
         </section>
 
-        {/* Add Form */}
         {showAddForm && (
           <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 mb-10">
             <h2 className="text-xl font-semibold mb-6">הוספת משתמש חדש</h2>
-
-            <form
-              onSubmit={handleSubmit}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium mb-1">שם מלא</label>
                 <input
@@ -190,9 +242,7 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.full_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, full_name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                 />
               </div>
 
@@ -203,9 +253,7 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
 
@@ -217,9 +265,7 @@ export default function UserManagementPage() {
                   minLength={6}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
 
@@ -228,9 +274,7 @@ export default function UserManagementPage() {
                 <select
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 >
                   <option value="admin">Admin</option>
                   <option value="doctor">Doctor</option>
@@ -239,16 +283,12 @@ export default function UserManagementPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  טלפון (אופציונלי)
-                </label>
+                <label className="block text-sm font-medium mb-1">טלפון (אופציונלי)</label>
                 <input
                   type="tel"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
 
@@ -260,10 +300,7 @@ export default function UserManagementPage() {
                 >
                   ביטול
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
-                >
+                <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700">
                   שמור משתמש
                 </button>
               </div>
@@ -271,7 +308,6 @@ export default function UserManagementPage() {
           </div>
         )}
 
-        {/* Table */}
         <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-right">
@@ -282,48 +318,47 @@ export default function UserManagementPage() {
                   <th className="px-6 py-4 font-semibold">טלפון</th>
                   <th className="px-6 py-4 font-semibold">אימייל</th>
                   <th className="px-6 py-4 font-semibold">ID</th>
+                  <th className="px-6 py-4 font-semibold">פעולות</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-10 text-center text-slate-500"
-                    >
-                      טוען משתמשים...
-                    </td>
-                  </tr>
+                  <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-500">טוען משתמשים...</td></tr>
                 ) : users.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-10 text-center text-slate-500"
-                    >
-                      לא נמצאו משתמשים
-                    </td>
-                  </tr>
+                  <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-500">לא נמצאו משתמשים</td></tr>
                 ) : (
                   users.map((u) => (
-                    <tr
-                      key={u.id}
-                      className="hover:bg-slate-50 transition-colors"
-                    >
+                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 font-medium flex items-center gap-3">
                         <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
                           <UserIcon className="w-4 h-4" />
                         </div>
                         {u.full_name}
                       </td>
-
                       <td className="px-6 py-4">{u.role}</td>
-                      <td className="px-6 py-4 text-slate-600">
-                        {u.phone ?? "—"}
-                      </td>
+                      <td className="px-6 py-4 text-slate-600">{u.phone ?? "—"}</td>
                       <td className="px-6 py-4 text-slate-600">{u.email}</td>
-                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">
-                        {u.id}
+                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">{u.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(u)}
+                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50"
+                            aria-label="Edit user"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserToDelete(u)}
+                            className="p-2 rounded-lg text-rose-600 hover:bg-rose-50"
+                            aria-label="Delete user"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -333,6 +368,106 @@ export default function UserManagementPage() {
           </div>
         </div>
       </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl relative">
+            <button className="absolute left-4 top-4 text-slate-500" onClick={() => setShowSuccessModal(false)}>
+              <X className="w-5 h-5" />
+            </button>
+            <div className="mx-auto w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
+              <Check className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mt-4">המשתמש נוסף בהצלחה</h3>
+            <p className="text-slate-500 mt-2">משתמש חדש נוצר ונשמר במערכת.</p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl"
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl">
+            <h3 className="text-xl font-semibold mb-5">עריכת משתמש</h3>
+            <form onSubmit={handleEditSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">שם מלא</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">אימייל</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">תפקיד</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="nurse">Nurse</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">טלפון</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </div>
+
+              <div className="md:col-span-2 flex justify-end gap-3 mt-2">
+                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 rounded-xl bg-slate-100">
+                  ביטול
+                </button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 text-white">
+                  שמור שינויים
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {userToDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-semibold text-slate-900">אישור מחיקה</h3>
+            <p className="text-slate-600 mt-2">
+              למחוק את המשתמש <span className="font-semibold">{userToDelete.full_name}</span>? פעולה זו אינה ניתנת לביטול.
+            </p>
+            <div className="flex justify-end gap-3 mt-6">
+              <button className="px-4 py-2 rounded-xl bg-slate-100" onClick={() => setUserToDelete(null)}>
+                ביטול
+              </button>
+              <button className="px-4 py-2 rounded-xl bg-rose-600 text-white" onClick={() => void confirmDeleteUser()}>
+                מחק משתמש
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
