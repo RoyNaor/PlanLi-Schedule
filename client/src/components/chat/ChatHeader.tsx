@@ -1,7 +1,6 @@
 interface ChatHeaderProps {
   userId: string;
   displayName?: string;
-  onUserIdChange: (value: string) => void;
   onLoadConversation: () => Promise<void>;
   loading: boolean;
 }
@@ -10,7 +9,6 @@ interface ChatHeaderProps {
 export function ChatHeader({
   userId,
   displayName,
-  onUserIdChange,
   onLoadConversation,
   loading,
 }: ChatHeaderProps) {
@@ -35,8 +33,8 @@ export function ChatHeader({
       >
         <input
           value={userId}
-          onChange={(e) => onUserIdChange(e.target.value)}
-          placeholder="User ID"
+          readOnly
+          aria-label="User ID"
           className="w-full sm:w-80 min-w-0 px-3 py-2 text-sm border border-emerald-200 rounded-lg bg-emerald-50/40 text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
 
