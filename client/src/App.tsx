@@ -6,13 +6,13 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { LogIn, LogOut, Menu, MessageCircle, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import "./App.css";
 import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
 import { AuthService } from "./services/auth.service";
+import Sidebar from "./components/Sidebar";
 
-// Controls route-level access by reading and reacting to auth session changes.
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,18 +20,14 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    // Keep React state synced with sessionStorage updates from auth flows.
-    const syncSession = () => {
-      setSession(AuthService.getSession());
-    };
-
+    const syncSession = () => setSession(AuthService.getSession());
     window.addEventListener("planli:session-changed", syncSession);
-    return () => {
+    return () =>
       window.removeEventListener("planli:session-changed", syncSession);
-    };
   }, []);
 
   useEffect(() => {
+    // כל מעבר עמוד סוגר את הסיידבר במובייל
     setSidebarOpen(false);
   }, [location.pathname]);
 
@@ -41,49 +37,35 @@ function App() {
       navigate("/login", { replace: true });
       return;
     }
-
     navigate("/login");
   };
 
+  const handleNavigate = (path: string) => navigate(path);
+
   return (
     <div className="app-layout">
-      <button
-        type="button"
-        className="burger-toggle"
-        onClick={() => setSidebarOpen((prev) => !prev)}
-        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-      >
-        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
-
-      <aside className={`app-sidebar ${sidebarOpen ? "is-open" : ""}`}>
-        <div className="sidebar-brand">PlanLI</div>
-
+      {/* ✅ המבורגר מוצג רק כשהסיידבר סגור */}
+      {!sidebarOpen && (
         <button
           type="button"
-          className={`sidebar-link ${location.pathname === "/chat" ? "is-active" : ""}`}
-          onClick={() => navigate("/chat")}
+          className="burger-toggle"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="פתח תפריט"
         >
-          <MessageCircle size={18} />
-          <span>צ'אט</span>
+          <Menu size={20} />
         </button>
+      )}
 
-        <button type="button" className="sidebar-auth" onClick={handleAuthAction}>
-          {session ? <LogOut size={18} /> : <LogIn size={18} />}
-          <span>{session ? "התנתק" : "התחבר"}</span>
-        </button>
-      </aside>
+      <Sidebar
+        open={sidebarOpen}
+        currentPath={location.pathname}
+        hasSession={Boolean(session)}
+        onClose={() => setSidebarOpen(false)}
+        onNavigate={handleNavigate}
+        onAuthAction={handleAuthAction}
+      />
 
-      {sidebarOpen ? (
-        <button
-          type="button"
-          className="sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
-          aria-label="Close sidebar overlay"
-        />
-      ) : null}
-
-      <div className="app-content">
+      <main className="app-content">
         <Routes>
           <Route
             path="/"
@@ -95,7 +77,7 @@ function App() {
             element={session ? <ChatBot /> : <Navigate to="/login" replace />}
           />
         </Routes>
-      </div>
+      </main>
     </div>
   );
 }
