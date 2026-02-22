@@ -28,6 +28,11 @@ body {
   position: relative;
 }
 
+.app-layout.is-login {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "content";
+}
+
 .app-content {
   grid-area: content;
   min-height: 100vh;

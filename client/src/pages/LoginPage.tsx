@@ -40,7 +40,7 @@ export default function LoginPage() {
     } catch (err: any) {
       const message =
         err?.response?.data?.error ??
-        "Failed to log in. Please check your credentials.";
+        "ההתחברות נכשלה. נא לבדוק את פרטי ההתחברות.";
       setError(message);
       console.error(err);
     } finally {
@@ -49,10 +49,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
+    <div
+      dir="rtl"
+      className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md text-right"
+    >
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">PlanLI Admin</h1>
-        <p className="text-slate-500">Sign in to manage schedules</p>
+        <h1 className="text-2xl font-bold text-slate-900">ניהול PlanLI</h1>
+        <p className="text-slate-500">התחברות לניהול לוחות זמנים</p>
       </div>
 
       {error && (
@@ -64,16 +67,16 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            Email
+            אימייל
           </label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full pr-10 pl-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="admin@planli.com"
             />
           </div>
@@ -81,16 +84,16 @@ export default function LoginPage() {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            Password
+            סיסמה
           </label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full pr-10 pl-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="••••••••"
             />
           </div>
@@ -101,12 +104,12 @@ export default function LoginPage() {
           disabled={submitting}
           className="w-full bg-emerald-600 text-white py-2 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
         >
-          Sign In
+          התחברות
         </button>
       </form>
 
       <div className="mt-6 text-center text-xs text-slate-400">
-        Registration is disabled. Contact system administrator for access.
+        ההרשמה למערכת כבויה. יש לפנות למנהל המערכת לקבלת גישה.
       </div>
     </div>
   );
