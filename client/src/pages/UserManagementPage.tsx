@@ -1,0 +1,681 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { Navigate } from "react-router-dom";
+import {
+  Check,
+  Pencil,
+  Plus,
+  Stethoscope,
+  Trash2,
+  User as UserIcon,
+  Users,
+  X,
+  ShieldCheck,
+  Search,
+} from "lucide-react";
+import { AuthService } from "../services/auth.service";
+
+interface UserData {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  phone: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface EditFormData {
+  email: string;
+  full_name: string;
+  role: string;
+  phone: string;
+}
+
+const API_BASE = "http://localhost:3000/api";
+
+const formatRoleLabel = (role: string) => {
+  const roleMap: Record<string, string> = {
+    admin: "מנהלים",
+    doctor: "רופאים",
+    nurse: "אחיות",
+  };
+
+  return roleMap[role] ?? role;
+};
+
+const defaultAddForm = {
+  email: "",
+  password: "",
+  full_name: "",
+  role: "doctor",
+  phone: "",
+};
+
+export default function UserManagementPage() {
+  const session = useMemo(() => AuthService.getSession(), []);
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+
+  const [formData, setFormData] = useState(defaultAddForm);
+  const [editForm, setEditForm] = useState<EditFormData>({
+    email: "",
+    full_name: "",
+    role: "doctor",
+    phone: "",
+  });
+
+  const fetchUsers = useCallback(async () => {
+    if (!session) return;
+
+    try {
+      setLoading(true);
+      const res = await axios.get<UserData[]>(`${API_BASE}/users`, {
+        headers: { Authorization: `Bearer ${session.jwtToken}` },
+      });
+
+      setUsers(res.data);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
+
+  const analytics = useMemo(() => {
+    const roleCounts = users.reduce<Record<string, number>>((acc, user) => {
+      const roleKey = user.role.trim().toLowerCase();
+      acc[roleKey] = (acc[roleKey] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      totalUsers: users.length,
+      doctors: roleCounts.doctor ?? 0,
+      nurses: roleCounts.nurse ?? 0,
+      admins: roleCounts.admin ?? 0,
+      roleCounts,
+    };
+  }, [users]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesRole = roleFilter === "all" || user.role === roleFilter;
+
+      if (!normalizedSearch) {
+        return matchesRole;
+      }
+
+      const searchableFields = [
+        user.full_name,
+        user.email,
+        user.phone ?? "",
+        user.id,
+      ];
+
+      const matchesSearch = searchableFields.some((field) =>
+        field.toLowerCase().includes(normalizedSearch),
+      );
+
+      return matchesRole && matchesSearch;
+    });
+  }, [roleFilter, searchTerm, users]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session) return;
+
+    try {
+      const payload = {
+        ...formData,
+        phone: formData.phone.trim() === "" ? null : formData.phone.trim(),
+      };
+
+      await axios.post(`${API_BASE}/users`, payload, {
+        headers: { Authorization: `Bearer ${session.jwtToken}` },
+      });
+
+      setShowAddForm(false);
+      setFormData(defaultAddForm);
+      setShowSuccessModal(true);
+      void fetchUsers();
+    } catch (error: any) {
+      console.error("Error adding user:", error);
+      const msg = error.response?.data?.error || "Failed to add user";
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  const openEditModal = (user: UserData) => {
+    setEditingUser(user);
+    setEditForm({
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      phone: user.phone ?? "",
+    });
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session || !editingUser) return;
+
+    try {
+      await axios.put(
+        `${API_BASE}/users/${editingUser.id}`,
+        {
+          email: editForm.email,
+          full_name: editForm.full_name,
+          role: editForm.role,
+          phone: editForm.phone.trim() === "" ? null : editForm.phone.trim(),
+        },
+        { headers: { Authorization: `Bearer ${session.jwtToken}` } },
+      );
+
+      setEditingUser(null);
+      void fetchUsers();
+    } catch (error: any) {
+      console.error("Error updating user:", error);
+      const msg = error.response?.data?.error || "Failed to update user";
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!session || !userToDelete) return;
+
+    try {
+      await axios.delete(`${API_BASE}/users/${userToDelete.id}`, {
+        headers: { Authorization: `Bearer ${session.jwtToken}` },
+      });
+
+      setUserToDelete(null);
+      void fetchUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      const msg = error.response?.data?.error || "Failed to delete user";
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  if (!session) return <Navigate to="/login" replace />;
+  if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
+
+  return (
+    <div className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">ניהול משתמשים</h1>
+            <p className="text-slate-500 mt-1">יצירה וניהול של משתמשי המערכת</p>
+          </div>
+
+          {!showAddForm && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              הוסף משתמש חדש
+            </button>
+          )}
+        </div>
+
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">סה״כ משתמשים</p>
+              <span className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.totalUsers}
+            </p>
+          </article>
+
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">רופאים</p>
+              <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Stethoscope className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.doctors}
+            </p>
+          </article>
+
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">אחיות</p>
+              <span className="w-10 h-10 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center">
+                <Stethoscope className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.nurses}
+            </p>
+          </article>
+
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">מנהלים</p>
+              <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.admins}
+            </p>
+          </article>
+        </section>
+
+        {showAddForm && (
+          <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 mb-10">
+            <h2 className="text-xl font-semibold mb-6">הוספת משתמש חדש</h2>
+            <form
+              onSubmit={handleSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1">שם מלא</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">אימייל</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">סיסמה</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">תפקיד</label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value })
+                  }
+                >
+                  <option value="admin">Admin</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="nurse">Nurse</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">טלפון</label>
+                <input
+                  type="tel"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-3 flex justify-end gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+                >
+                  שמור משתמש
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70">
+            <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="חיפוש לפי שם, אימייל, טלפון או מזהה"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">כל התפקידים</option>
+                  <option value="admin">מנהלים</option>
+                  <option value="doctor">רופאים</option>
+                  <option value="nurse">אחיות</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setRoleFilter("all");
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100"
+                >
+                  ניקוי
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto hidden md:block">
+            <table className="w-full text-sm text-right">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="px-6 py-4 font-semibold">שם</th>
+                  <th className="px-6 py-4 font-semibold">תפקיד</th>
+                  <th className="px-6 py-4 font-semibold">טלפון</th>
+                  <th className="px-6 py-4 font-semibold">אימייל</th>
+                  <th className="px-6 py-4 font-semibold">ID</th>
+                  <th className="px-6 py-4 font-semibold">פעולות</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      טוען משתמשים...
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      לא נמצאו משתמשים
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="hover:bg-slate-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 font-medium flex items-center gap-3">
+                        <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                          <UserIcon className="w-4 h-4" />
+                        </div>
+                        {u.full_name}
+                      </td>
+                      <td className="px-6 py-4">{u.role}</td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {u.phone ?? "—"}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{u.email}</td>
+                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">
+                        {u.id}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(u)}
+                            className="p-2 rounded-lg text-orange-300 hover:bg-orange-50"
+                            aria-label="Edit user"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserToDelete(u)}
+                            className="p-2 rounded-lg text-rose-600 hover:bg-rose-50"
+                            aria-label="Delete user"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-slate-100">
+            {loading ? (
+              <p className="px-4 py-8 text-center text-slate-500">טוען משתמשים...</p>
+            ) : filteredUsers.length === 0 ? (
+              <p className="px-4 py-8 text-center text-slate-500">לא נמצאו משתמשים</p>
+            ) : (
+              filteredUsers.map((u) => (
+                <article key={u.id} className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                        <UserIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{u.full_name}</p>
+                        <p className="text-xs text-slate-500">{formatRoleLabel(u.role)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(u)}
+                        className="p-2 rounded-lg text-orange-300 hover:bg-orange-50"
+                        aria-label="Edit user"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUserToDelete(u)}
+                        className="p-2 rounded-lg text-rose-600 hover:bg-rose-50"
+                        aria-label="Delete user"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-sm text-slate-600 space-y-1">
+                    <p className="break-all">{u.email}</p>
+                    <p>{u.phone ?? "—"}</p>
+                    <p className="text-xs text-slate-400 font-mono break-all">{u.id}</p>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl relative">
+            <button
+              className="absolute left-4 top-4 text-slate-500"
+              onClick={() => setShowSuccessModal(false)}
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="mx-auto w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
+              <Check className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mt-4">
+              המשתמש נוסף בהצלחה
+            </h3>
+            <p className="text-slate-500 mt-2">משתמש חדש נוצר ונשמר במערכת.</p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl"
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl">
+            <h3 className="text-xl font-semibold mb-5">עריכת משתמש</h3>
+            <form
+              onSubmit={handleEditSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1">שם מלא</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.full_name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, full_name: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">אימייל</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.email}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, email: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">תפקיד</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, role: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="nurse">Nurse</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">טלפון</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={editForm.phone}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, phone: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-2 flex justify-end gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white"
+                >
+                  שמור שינויים
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {userToDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-semibold text-slate-900">
+              אישור מחיקה
+            </h3>
+            <p className="text-slate-600 mt-2">
+              למחוק את המשתמש{" "}
+              <span className="font-semibold">{userToDelete.full_name}</span>?
+              פעולה זו אינה ניתנת לביטול.
+            </p>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                className="px-4 py-2 rounded-xl bg-slate-100"
+                onClick={() => setUserToDelete(null)}
+              >
+                ביטול
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white"
+                onClick={() => void confirmDeleteUser()}
+              >
+                מחק משתמש
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
