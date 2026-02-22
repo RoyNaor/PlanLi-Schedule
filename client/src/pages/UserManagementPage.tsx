@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
-import { Plus, User as UserIcon } from "lucide-react";
+import { Plus, User as UserIcon, Users, Stethoscope } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
 interface UserData {
@@ -15,6 +15,16 @@ interface UserData {
 }
 
 const API_BASE = "http://localhost:3000/api";
+
+const formatRoleLabel = (role: string) => {
+  const roleMap: Record<string, string> = {
+    admin: "מנהלים",
+    doctor: "רופאים",
+    nurse: "אחיות",
+  };
+
+  return roleMap[role] ?? role;
+};
 
 export default function UserManagementPage() {
   const session = useMemo(() => AuthService.getSession(), []);
@@ -52,6 +62,20 @@ export default function UserManagementPage() {
   useEffect(() => {
     void fetchUsers();
   }, [fetchUsers]);
+
+  const analytics = useMemo(() => {
+    const roleCounts = users.reduce<Record<string, number>>((acc, user) => {
+      const roleKey = user.role.trim().toLowerCase();
+      acc[roleKey] = (acc[roleKey] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      totalUsers: users.length,
+      doctors: roleCounts.doctor ?? 0,
+      roleCounts,
+    };
+  }, [users]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,10 +121,10 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="w-full px-4 sm:px-6 lg:px-12 py-6">
+    <div className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-10">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">ניהול משתמשים</h1>
             <p className="text-slate-500 mt-1">יצירה וניהול של משתמשי המערכת</p>
@@ -111,9 +135,44 @@ export default function UserManagementPage() {
             className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
           >
             <Plus className="w-5 h-5" />
-            הוסף משתמש חדש
+            {showAddForm ? "ביטול" : "הוסף משתמש חדש"}
           </button>
         </div>
+
+        {/* Analytics */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">סה״כ משתמשים</p>
+              <span className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <Users className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">{analytics.totalUsers}</p>
+          </article>
+
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">רופאים</p>
+              <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Stethoscope className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">{analytics.doctors}</p>
+          </article>
+
+          {Object.entries(analytics.roleCounts)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([role, count]) => (
+              <article
+                key={role}
+                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
+              >
+                <p className="text-sm text-slate-500">{formatRoleLabel(role)}</p>
+                <p className="text-3xl font-semibold text-slate-900 mt-3">{count}</p>
+              </article>
+            ))}
+        </section>
 
         {/* Add Form */}
         {showAddForm && (
