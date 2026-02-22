@@ -62,7 +62,7 @@ function App() {
   const handleNavigate = (path: string) => navigate(path);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout${isLoginRoute ? " is-login" : ""}`}>
       {!isLoginRoute && !sidebarOpen && (
         <button
           type="button"
