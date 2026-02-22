@@ -17,6 +17,16 @@ export default function Sidebar({
   onNavigate,
   onAuthAction,
 }: SidebarProps) {
+  const handleNavigate = (path: string) => {
+    onNavigate(path);
+    onClose();
+  };
+
+  const handleAuthAction = () => {
+    onAuthAction();
+    onClose();
+  };
+
   return (
     <>
       {/* Overlay במובייל */}
@@ -56,7 +66,7 @@ export default function Sidebar({
           <button
             type="button"
             className={`sidebar-link ${currentPath === "/chat" ? "is-active" : ""}`}
-            onClick={() => onNavigate("/chat")}
+            onClick={() => handleNavigate("/chat")}
           >
             <MessageCircle size={18} />
             <span>צ׳אט</span>
@@ -64,7 +74,7 @@ export default function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <button type="button" className="sidebar-auth" onClick={onAuthAction}>
+          <button type="button" className="sidebar-auth" onClick={handleAuthAction}>
             {hasSession ? <LogOut size={18} /> : <LogIn size={18} />}
             <span>{hasSession ? "התנתק" : "התחבר"}</span>
           </button>
