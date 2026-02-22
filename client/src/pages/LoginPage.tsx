@@ -54,13 +54,13 @@ export default function LoginPage() {
       dir="rtl"
       className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md text-right"
     >
-      <div className="text-center mb-8">
+      <div className="text-center mb-0">
         <img
           src={logo}
           alt="PlanLi Logo"
           width={400}
           height={200}
-          className="mx-auto mt-4"
+          className="mx-auto mt-2"
           draggable={false}
         />
       </div>
