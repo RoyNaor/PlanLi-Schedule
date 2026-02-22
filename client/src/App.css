@@ -195,6 +195,24 @@ body {
   direction: ltr;
 }
 
+.chat-card {
+  background: #ffffff;
+  border: 1px solid #d8e8de;
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+  overflow: hidden;
+}
+
+.chat-log {
+  min-height: 320px;
+  max-height: min(56vh, 640px);
+  overflow-y: auto;
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  background: #f9fcfa;
+}
+
 /* התאמה למובייל (רספונסיביות) */
 @media (max-width: 760px) {
   .app-layout {
