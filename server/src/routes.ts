@@ -25,6 +25,8 @@ router.post("/api/users/sync", requireAuth, userController.syncAuthenticatedUser
 router.get("/api/users/me", requireAuth, userController.getAuthenticatedUser);
 router.get("/api/users", requireAuth, userController.listUsers);
 router.post("/api/users", requireAuth, userController.createUser);
+router.put("/api/users/:userId", requireAuth, userController.updateUser);
+router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
 
 router.post("/api/chat", requireAuth, chatController.sendMessage);
 router.get("/api/chat/:userId", requireAuth, chatController.getConversation);
