@@ -1,9 +1,10 @@
-import { LogIn, LogOut, MessageCircle, X } from "lucide-react";
+import { LogIn, LogOut, MessageCircle, ShieldUser, X } from "lucide-react";
 
 type SidebarProps = {
   open: boolean;
   currentPath: string;
   hasSession: boolean;
+  isAdmin: boolean;
   onClose: () => void;
   onNavigate: (path: string) => void;
   onAuthAction: () => void;
@@ -13,6 +14,7 @@ export default function Sidebar({
   open,
   currentPath,
   hasSession,
+  isAdmin,
   onClose,
   onNavigate,
   onAuthAction,
@@ -71,6 +73,17 @@ export default function Sidebar({
             <MessageCircle size={18} />
             <span>צ׳אט</span>
           </button>
+
+          {isAdmin ? (
+            <button
+              type="button"
+              className={`sidebar-link ${currentPath === "/users" ? "is-active" : ""}`}
+              onClick={() => handleNavigate("/users")}
+            >
+              <ShieldUser size={18} />
+              <span>ניהול משתמשים</span>
+            </button>
+          ) : null}
         </nav>
 
         <div className="sidebar-footer">
