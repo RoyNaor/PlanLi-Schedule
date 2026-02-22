@@ -1,3 +1,4 @@
+/* הגדרות בסיסיות ומשתנים */
 :root {
   font-family: "Inter", "Segoe UI", sans-serif;
   color: #1f2937;
@@ -17,11 +18,176 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+.app-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-areas: "sidebar content";
+  position: relative;
+}
+
+.app-layout.is-login {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "content";
+}
+
+.app-content {
+  grid-area: content;
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: clamp(0.75rem, 3vw, 2rem);
 }
 
+/* Sidebar - עיצוב מודרני לבן/ירוק */
+.sidebar {
+  background: #ffffff;
+  color: #111827;
+  border-left: 1px solid rgba(17, 24, 39, 0.08);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  box-shadow: -10px 0 26px rgba(17, 24, 39, 0.06);
+  grid-area: sidebar;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sidebar-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #22c55e 0%, #a7f3d0 100%);
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.18);
+}
+
+.sidebar-brand-text {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.sidebar-title {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.sidebar-subtitle {
+  font-size: 0.82rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-close {
+  display: none; /* יוצג רק במובייל */
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #ffffff;
+  color: #111827;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+/* ניווט וכפתורים בסיידבר */
+.sidebar-nav {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sidebar-link,
+.sidebar-auth {
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 14px;
+  padding: 0.78rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background: rgba(34, 197, 94, 0.08);
+  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.08);
+  transform: translateY(-1px);
+}
+
+.sidebar-link.is-active {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.28);
+  box-shadow: 0 10px 26px rgba(34, 197, 94, 0.12);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sidebar-auth {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: rgba(22, 163, 74, 0.55);
+  justify-content: center;
+}
+
+.sidebar-auth:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(22, 163, 74, 0.22);
+  background: #15803d;
+}
+
+/* אלמנטים של ממשק המובייל */
+.burger-toggle {
+  position: fixed;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #ffffff;
+  color: #111827;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 60;
+  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.12);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.42);
+  z-index: 50;
+  border: none;
+}
+
+/* צ'אט */
 .chat-shell {
   width: min(920px, 100%);
   display: grid;
@@ -47,74 +213,40 @@ body {
   background: #f9fcfa;
 }
 
-@media (max-width: 640px) {
-  .chat-card {
-    border-radius: 14px;
+/* התאמה למובייל (רספונסיביות) */
+@media (max-width: 760px) {
+  .app-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .chat-log {
-    min-height: 45vh;
-    max-height: 58vh;
-    padding: 0.85rem;
-  }
-}
-
-.empty-state {
-  text-align: center;
-  color: #4b5563;
-  padding: 1rem;
-}
-
-.error-banner {
-  margin: 0 1rem 0.8rem;
-  padding: 0.7rem;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-}
-
-.typing-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.typing-label::after {
-  content: "...";
-}
-
-.typing-dots {
-  display: inline-flex;
-  gap: 0.22rem;
-}
-
-.typing-dots i {
-  width: 0.36rem;
-  height: 0.36rem;
-  border-radius: 999px;
-  background: #047857;
-  opacity: 0.35;
-  animation: typing-bounce 1s infinite ease-in-out;
-}
-
-.typing-dots i:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dots i:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing-bounce {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.35;
+  .burger-toggle {
+    display: inline-flex;
   }
 
-  50% {
-    transform: translateY(-3px);
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(84vw, 320px);
+    transform: translateX(110%);
+    opacity: 0;
+    z-index: 55;
+    transition: transform 320ms cubic-bezier(0.19, 1, 0.22, 1), opacity 220ms;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
     opacity: 1;
+  }
+
+  .sidebar-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-content {
+    padding: 3.8rem 0.65rem 0.9rem;
   }
 }
