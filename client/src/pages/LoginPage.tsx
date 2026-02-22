@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { Lock, Mail } from "lucide-react";
 import { auth } from "../firebase";
 import { AuthService } from "../services/auth.service";
+import logo from "../assets/Logo.png";
 
 // Handles sign-in with Firebase and then syncs the authenticated user with backend.
 export default function LoginPage() {
@@ -54,8 +55,14 @@ export default function LoginPage() {
       className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md text-right"
     >
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">ניהול PlanLI</h1>
-        <p className="text-slate-500">התחברות לניהול לוחות זמנים</p>
+        <img
+          src={logo}
+          alt="PlanLi Logo"
+          width={400}
+          height={200}
+          className="mx-auto mt-4"
+          draggable={false}
+        />
       </div>
 
       {error && (
@@ -109,7 +116,7 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-6 text-center text-xs text-slate-400">
-        ההרשמה למערכת כבויה. יש לפנות למנהל המערכת לקבלת גישה.
+        להרשמה למערכת יש לפנות למנהל המערכת לקבלת גישה.
       </div>
     </div>
   );
