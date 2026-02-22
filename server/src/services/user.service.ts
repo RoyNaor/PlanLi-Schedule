@@ -10,6 +10,14 @@ interface UserRow {
   updated_at: Date;
 }
 
+interface CreateUserInput {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  phone: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -66,5 +74,28 @@ export const UserService = {
     }
 
     return this.getUserByEmail(email);
+  },
+
+  // Returns all users for administrative management screens.
+  async listUsers(): Promise<UserRow[]> {
+    const result = await queryDatabase<UserRow>(
+      `SELECT id, email, full_name, role, phone, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC`,
+    );
+
+    return result.rows;
+  },
+
+  // Persists a provisioned user record linked to Firebase UID.
+  async createUser(input: CreateUserInput): Promise<UserRow> {
+    const result = await queryDatabase<UserRow>(
+      `INSERT INTO users (id, email, full_name, role, phone)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, full_name, role, phone, created_at, updated_at`,
+      [input.id, input.email, input.fullName, input.role, input.phone],
+    );
+
+    return result.rows[0] as UserRow;
   },
 };

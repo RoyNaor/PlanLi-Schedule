@@ -10,6 +10,7 @@ import { Menu } from "lucide-react";
 import "./App.css";
 import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
+import UserManagementPage from "./pages/UserManagementPage";
 import { AuthService } from "./services/auth.service";
 import Sidebar from "./components/Sidebar";
 
@@ -79,6 +80,7 @@ function App() {
           open={sidebarOpen}
           currentPath={location.pathname}
           hasSession={Boolean(session)}
+          isAdmin={session?.user.role === "admin"}
           onClose={() => setSidebarOpen(false)}
           onNavigate={handleNavigate}
           onAuthAction={handleAuthAction}
@@ -95,6 +97,10 @@ function App() {
           <Route
             path="/chat"
             element={session ? <ChatBot /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/users"
+            element={session ? <UserManagementPage /> : <Navigate to="/login" replace />}
           />
         </Routes>
       </main>
