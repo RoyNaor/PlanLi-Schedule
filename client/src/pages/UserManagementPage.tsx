@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
 import { Plus, User as UserIcon } from "lucide-react";
@@ -17,7 +17,7 @@ interface UserData {
 const API_BASE = "http://localhost:3000/api";
 
 export default function UserManagementPage() {
-  const session = AuthService.getSession();
+  const session = useMemo(() => AuthService.getSession(), []);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -47,7 +47,7 @@ export default function UserManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session?.jwtToken]);
 
   useEffect(() => {
     void fetchUsers();
