@@ -6,10 +6,11 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { LogIn, LogOut, Menu, MessageCircle, X } from "lucide-react";
+import { LogIn, LogOut, Menu, MessageCircle, Shield, X } from "lucide-react";
 import "./App.css";
 import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
+import UserManagementPage from "./pages/UserManagementPage";
 import { AuthService } from "./services/auth.service";
 
 // Controls route-level access by reading and reacting to auth session changes.
@@ -68,6 +69,17 @@ function App() {
           <span>צ'אט</span>
         </button>
 
+        {session?.user.role === "admin" ? (
+          <button
+            type="button"
+            className={`sidebar-link ${location.pathname === "/users" ? "is-active" : ""}`}
+            onClick={() => navigate("/users")}
+          >
+            <Shield size={18} />
+            <span>User Management</span>
+          </button>
+        ) : null}
+
         <button type="button" className="sidebar-auth" onClick={handleAuthAction}>
           {session ? <LogOut size={18} /> : <LogIn size={18} />}
           <span>{session ? "התנתק" : "התחבר"}</span>
@@ -93,6 +105,10 @@ function App() {
           <Route
             path="/chat"
             element={session ? <ChatBot /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/users"
+            element={session?.user.role === "admin" ? <UserManagementPage /> : <Navigate to="/chat" replace />}
           />
         </Routes>
       </div>

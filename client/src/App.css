@@ -237,3 +237,136 @@ body {
     opacity: 1;
   }
 }
+
+.users-shell {
+  width: min(1200px, 100%);
+  background: #fff;
+  border: 1px solid #d8e8de;
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+  padding: 1rem;
+  direction: ltr;
+}
+
+.users-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.users-header h1 {
+  margin: 0;
+}
+
+.users-header p {
+  margin: 0.35rem 0 0;
+  color: #4b5563;
+}
+
+.primary-btn,
+.ghost-btn {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.primary-btn {
+  background: #059669;
+  color: #fff;
+}
+
+.ghost-btn {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.users-form {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.users-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.users-form input,
+.users-form select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+}
+
+.users-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.users-table-wrap {
+  overflow: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.users-table th,
+.users-table td {
+  text-align: left;
+  padding: 0.65rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.user-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.user-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #d1fae5;
+  color: #047857;
+}
+
+.mono-cell {
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+
+.access-denied {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 0.8rem;
+  border-radius: 10px;
+}
+
+@media (max-width: 720px) {
+  .users-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
