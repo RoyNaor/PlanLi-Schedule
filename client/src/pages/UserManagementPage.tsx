@@ -11,6 +11,7 @@ import {
   Users,
   X,
   ShieldCheck,
+  Search,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
@@ -59,6 +60,8 @@ export default function UserManagementPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const [formData, setFormData] = useState(defaultAddForm);
   const [editForm, setEditForm] = useState<EditFormData>({
@@ -104,6 +107,31 @@ export default function UserManagementPage() {
       roleCounts,
     };
   }, [users]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesRole = roleFilter === "all" || user.role === roleFilter;
+
+      if (!normalizedSearch) {
+        return matchesRole;
+      }
+
+      const searchableFields = [
+        user.full_name,
+        user.email,
+        user.phone ?? "",
+        user.id,
+      ];
+
+      const matchesSearch = searchableFields.some((field) =>
+        field.toLowerCase().includes(normalizedSearch),
+      );
+
+      return matchesRole && matchesSearch;
+    });
+  }, [roleFilter, searchTerm, users]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -349,7 +377,46 @@ export default function UserManagementPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70">
+            <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="חיפוש לפי שם, אימייל, טלפון או מזהה"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">כל התפקידים</option>
+                  <option value="admin">מנהלים</option>
+                  <option value="doctor">רופאים</option>
+                  <option value="nurse">אחיות</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setRoleFilter("all");
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100"
+                >
+                  ניקוי
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto hidden md:block">
             <table className="w-full text-sm text-right">
               <thead className="bg-slate-50 border-b">
                 <tr>
@@ -372,7 +439,7 @@ export default function UserManagementPage() {
                       טוען משתמשים...
                     </td>
                   </tr>
-                ) : users.length === 0 ? (
+                ) : filteredUsers.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
@@ -382,7 +449,7 @@ export default function UserManagementPage() {
                     </td>
                   </tr>
                 ) : (
-                  users.map((u) => (
+                  filteredUsers.map((u) => (
                     <tr
                       key={u.id}
                       className="hover:bg-slate-50 transition-colors"
@@ -426,6 +493,53 @@ export default function UserManagementPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-slate-100">
+            {loading ? (
+              <p className="px-4 py-8 text-center text-slate-500">טוען משתמשים...</p>
+            ) : filteredUsers.length === 0 ? (
+              <p className="px-4 py-8 text-center text-slate-500">לא נמצאו משתמשים</p>
+            ) : (
+              filteredUsers.map((u) => (
+                <article key={u.id} className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                        <UserIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{u.full_name}</p>
+                        <p className="text-xs text-slate-500">{formatRoleLabel(u.role)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(u)}
+                        className="p-2 rounded-lg text-orange-300 hover:bg-orange-50"
+                        aria-label="Edit user"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUserToDelete(u)}
+                        className="p-2 rounded-lg text-rose-600 hover:bg-rose-50"
+                        aria-label="Delete user"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-sm text-slate-600 space-y-1">
+                    <p className="break-all">{u.email}</p>
+                    <p>{u.phone ?? "—"}</p>
+                    <p className="text-xs text-slate-400 font-mono break-all">{u.id}</p>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </div>
       </div>
