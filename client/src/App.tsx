@@ -18,6 +18,7 @@ function App() {
   const location = useLocation();
   const [session, setSession] = useState(() => AuthService.getSession());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isLoginRoute = location.pathname === "/login";
 
   useEffect(() => {
     const syncSession = () => setSession(AuthService.getSession());
@@ -27,13 +28,31 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const validateExistingSession = async () => {
+      const activeSession = AuthService.getSession();
+      if (!activeSession) {
+        return;
+      }
+
+      try {
+        await AuthService.getAuthenticatedUser(activeSession.jwtToken);
+      } catch {
+        await AuthService.clearSession();
+        navigate("/login", { replace: true });
+      }
+    };
+
+    void validateExistingSession();
+  }, [navigate]);
+
+  useEffect(() => {
     // כל מעבר עמוד סוגר את הסיידבר במובייל
     setSidebarOpen(false);
   }, [location.pathname]);
 
   const handleAuthAction = () => {
     if (session) {
-      AuthService.clearSession();
+      void AuthService.clearSession();
       navigate("/login", { replace: true });
       return;
     }
@@ -44,8 +63,7 @@ function App() {
 
   return (
     <div className="app-layout">
-      {/* ✅ המבורגר מוצג רק כשהסיידבר סגור */}
-      {!sidebarOpen && (
+      {!isLoginRoute && !sidebarOpen && (
         <button
           type="button"
           className="burger-toggle"
@@ -56,14 +74,16 @@ function App() {
         </button>
       )}
 
-      <Sidebar
-        open={sidebarOpen}
-        currentPath={location.pathname}
-        hasSession={Boolean(session)}
-        onClose={() => setSidebarOpen(false)}
-        onNavigate={handleNavigate}
-        onAuthAction={handleAuthAction}
-      />
+      {!isLoginRoute ? (
+        <Sidebar
+          open={sidebarOpen}
+          currentPath={location.pathname}
+          hasSession={Boolean(session)}
+          onClose={() => setSidebarOpen(false)}
+          onNavigate={handleNavigate}
+          onAuthAction={handleAuthAction}
+        />
+      ) : null}
 
       <main className="app-content">
         <Routes>
