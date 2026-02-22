@@ -10,6 +10,7 @@ import {
   User as UserIcon,
   Users,
   X,
+  ShieldCheck,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
@@ -98,6 +99,8 @@ export default function UserManagementPage() {
     return {
       totalUsers: users.length,
       doctors: roleCounts.doctor ?? 0,
+      nurses: roleCounts.nurse ?? 0,
+      admins: roleCounts.admin ?? 0,
       roleCounts,
     };
   }, [users]);
@@ -191,13 +194,15 @@ export default function UserManagementPage() {
             <p className="text-slate-500 mt-1">יצירה וניהול של משתמשי המערכת</p>
           </div>
 
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
-          >
-            <Plus className="w-5 h-5" />
-            {showAddForm ? "ביטול" : "הוסף משתמש חדש"}
-          </button>
+          {!showAddForm && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              הוסף משתמש חדש
+            </button>
+          )}
         </div>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -208,7 +213,9 @@ export default function UserManagementPage() {
                 <Users className="w-5 h-5" />
               </span>
             </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">{analytics.totalUsers}</p>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.totalUsers}
+            </p>
           </article>
 
           <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
@@ -218,23 +225,43 @@ export default function UserManagementPage() {
                 <Stethoscope className="w-5 h-5" />
               </span>
             </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">{analytics.doctors}</p>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.doctors}
+            </p>
           </article>
 
-          {Object.entries(analytics.roleCounts)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([role, count]) => (
-              <article key={role} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                <p className="text-sm text-slate-500">{formatRoleLabel(role)}</p>
-                <p className="text-3xl font-semibold text-slate-900 mt-3">{count}</p>
-              </article>
-            ))}
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">אחיות</p>
+              <span className="w-10 h-10 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center">
+                <Stethoscope className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.nurses}
+            </p>
+          </article>
+
+          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">מנהלים</p>
+              <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5" />
+              </span>
+            </div>
+            <p className="text-3xl font-semibold text-slate-900 mt-3">
+              {analytics.admins}
+            </p>
+          </article>
         </section>
 
         {showAddForm && (
           <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 mb-10">
             <h2 className="text-xl font-semibold mb-6">הוספת משתמש חדש</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <form
+              onSubmit={handleSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
               <div>
                 <label className="block text-sm font-medium mb-1">שם מלא</label>
                 <input
@@ -242,7 +269,9 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
                 />
               </div>
 
@@ -253,7 +282,9 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
                 />
               </div>
 
@@ -265,7 +296,9 @@ export default function UserManagementPage() {
                   minLength={6}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
                 />
               </div>
 
@@ -274,7 +307,9 @@ export default function UserManagementPage() {
                 <select
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value })
+                  }
                 >
                   <option value="admin">Admin</option>
                   <option value="doctor">Doctor</option>
@@ -283,12 +318,14 @@ export default function UserManagementPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">טלפון (אופציונלי)</label>
+                <label className="block text-sm font-medium mb-1">טלפון</label>
                 <input
                   type="tel"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
                 />
               </div>
 
@@ -300,7 +337,10 @@ export default function UserManagementPage() {
                 >
                   ביטול
                 </button>
-                <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+                >
                   שמור משתמש
                 </button>
               </div>
@@ -324,12 +364,29 @@ export default function UserManagementPage() {
 
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-500">טוען משתמשים...</td></tr>
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      טוען משתמשים...
+                    </td>
+                  </tr>
                 ) : users.length === 0 ? (
-                  <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-500">לא נמצאו משתמשים</td></tr>
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      לא נמצאו משתמשים
+                    </td>
+                  </tr>
                 ) : (
                   users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={u.id}
+                      className="hover:bg-slate-50 transition-colors"
+                    >
                       <td className="px-6 py-4 font-medium flex items-center gap-3">
                         <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
                           <UserIcon className="w-4 h-4" />
@@ -337,15 +394,19 @@ export default function UserManagementPage() {
                         {u.full_name}
                       </td>
                       <td className="px-6 py-4">{u.role}</td>
-                      <td className="px-6 py-4 text-slate-600">{u.phone ?? "—"}</td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {u.phone ?? "—"}
+                      </td>
                       <td className="px-6 py-4 text-slate-600">{u.email}</td>
-                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">{u.id}</td>
+                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">
+                        {u.id}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => openEditModal(u)}
-                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50"
+                            className="p-2 rounded-lg text-orange-300 hover:bg-orange-50"
                             aria-label="Edit user"
                           >
                             <Pencil className="w-4 h-4" />
@@ -372,13 +433,18 @@ export default function UserManagementPage() {
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl relative">
-            <button className="absolute left-4 top-4 text-slate-500" onClick={() => setShowSuccessModal(false)}>
+            <button
+              className="absolute left-4 top-4 text-slate-500"
+              onClick={() => setShowSuccessModal(false)}
+            >
               <X className="w-5 h-5" />
             </button>
             <div className="mx-auto w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
               <Check className="w-10 h-10 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mt-4">המשתמש נוסף בהצלחה</h3>
+            <h3 className="text-xl font-bold text-slate-900 mt-4">
+              המשתמש נוסף בהצלחה
+            </h3>
             <p className="text-slate-500 mt-2">משתמש חדש נוצר ונשמר במערכת.</p>
             <button
               onClick={() => setShowSuccessModal(false)}
@@ -394,7 +460,10 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl">
             <h3 className="text-xl font-semibold mb-5">עריכת משתמש</h3>
-            <form onSubmit={handleEditSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form
+              onSubmit={handleEditSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
               <div>
                 <label className="block text-sm font-medium mb-1">שם מלא</label>
                 <input
@@ -402,7 +471,9 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   value={editForm.full_name}
-                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, full_name: e.target.value })
+                  }
                 />
               </div>
               <div>
@@ -412,14 +483,18 @@ export default function UserManagementPage() {
                   required
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, email: e.target.value })
+                  }
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">תפקיד</label>
                 <select
                   value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, role: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                 >
                   <option value="admin">Admin</option>
@@ -433,15 +508,24 @@ export default function UserManagementPage() {
                   type="text"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   value={editForm.phone}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, phone: e.target.value })
+                  }
                 />
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-3 mt-2">
-                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 rounded-xl bg-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100"
+                >
                   ביטול
                 </button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 text-white">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white"
+                >
                   שמור שינויים
                 </button>
               </div>
@@ -453,15 +537,25 @@ export default function UserManagementPage() {
       {userToDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-xl font-semibold text-slate-900">אישור מחיקה</h3>
+            <h3 className="text-xl font-semibold text-slate-900">
+              אישור מחיקה
+            </h3>
             <p className="text-slate-600 mt-2">
-              למחוק את המשתמש <span className="font-semibold">{userToDelete.full_name}</span>? פעולה זו אינה ניתנת לביטול.
+              למחוק את המשתמש{" "}
+              <span className="font-semibold">{userToDelete.full_name}</span>?
+              פעולה זו אינה ניתנת לביטול.
             </p>
             <div className="flex justify-end gap-3 mt-6">
-              <button className="px-4 py-2 rounded-xl bg-slate-100" onClick={() => setUserToDelete(null)}>
+              <button
+                className="px-4 py-2 rounded-xl bg-slate-100"
+                onClick={() => setUserToDelete(null)}
+              >
                 ביטול
               </button>
-              <button className="px-4 py-2 rounded-xl bg-rose-600 text-white" onClick={() => void confirmDeleteUser()}>
+              <button
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white"
+                onClick={() => void confirmDeleteUser()}
+              >
                 מחק משתמש
               </button>
             </div>
