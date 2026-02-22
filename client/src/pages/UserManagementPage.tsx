@@ -97,150 +97,181 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
-          <p className="text-slate-500">Create and manage platform users</p>
+    <div className="w-full px-4 sm:px-6 lg:px-12 py-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-10">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">ניהול משתמשים</h1>
+            <p className="text-slate-500 mt-1">יצירה וניהול של משתמשי המערכת</p>
+          </div>
+
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            הוסף משתמש חדש
+          </button>
         </div>
 
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Add New User
-        </button>
-      </div>
+        {/* Add Form */}
+        {showAddForm && (
+          <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 mb-10">
+            <h2 className="text-xl font-semibold mb-6">הוספת משתמש חדש</h2>
 
-      {showAddForm && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 animate-in fade-in slide-in-from-top-4">
-          <h2 className="text-lg font-semibold mb-4">Add New User</h2>
+            <form
+              onSubmit={handleSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1">שם מלא</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                />
+              </div>
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">אימייל</label>
+                <input
+                  type="email"
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <input
-                type="email"
-                required
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">סיסמה</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Min 6 characters"
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">תפקיד</label>
+                <select
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value })
+                  }
+                >
+                  <option value="admin">Admin</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="nurse">Nurse</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-              <select
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              >
-                <option value="admin">Admin</option>
-                <option value="doctor">Doctor</option>
-                <option value="nurse">Nurse</option>
-              </select>
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  טלפון (אופציונלי)
+                </label>
+                <input
+                  type="tel"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Phone (Optional)</label>
-              <input
-                type="tel"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="e.g. 0501234567"
-              />
-            </div>
+              <div className="md:col-span-2 lg:col-span-3 flex justify-end gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+                >
+                  שמור משתמש
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
-            <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-              >
-                Save User
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-4 font-semibold text-slate-700">Name</th>
-                <th className="px-6 py-4 font-semibold text-slate-700">Role</th>
-                <th className="px-6 py-4 font-semibold text-slate-700">Phone</th>
-                <th className="px-6 py-4 font-semibold text-slate-700">Email</th>
-                <th className="px-6 py-4 font-semibold text-slate-700">ID</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
+        {/* Table */}
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-right">
+              <thead className="bg-slate-50 border-b">
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                    Loading users...
-                  </td>
+                  <th className="px-6 py-4 font-semibold">שם</th>
+                  <th className="px-6 py-4 font-semibold">תפקיד</th>
+                  <th className="px-6 py-4 font-semibold">טלפון</th>
+                  <th className="px-6 py-4 font-semibold">אימייל</th>
+                  <th className="px-6 py-4 font-semibold">ID</th>
                 </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                    No users found.
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900 flex items-center gap-3">
-                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                        <UserIcon className="w-4 h-4" />
-                      </div>
-                      {u.full_name}
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      טוען משתמשים...
                     </td>
-
-                    <td className="px-6 py-4">{u.role}</td>
-                    <td className="px-6 py-4 text-slate-600">{u.phone ?? "—"}</td>
-                    <td className="px-6 py-4 text-slate-600">{u.email}</td>
-                    <td className="px-6 py-4 text-slate-400 font-mono text-xs">{u.id}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-6 py-10 text-center text-slate-500"
+                    >
+                      לא נמצאו משתמשים
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="hover:bg-slate-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 font-medium flex items-center gap-3">
+                        <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                          <UserIcon className="w-4 h-4" />
+                        </div>
+                        {u.full_name}
+                      </td>
+
+                      <td className="px-6 py-4">{u.role}</td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {u.phone ?? "—"}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{u.email}</td>
+                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">
+                        {u.id}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
