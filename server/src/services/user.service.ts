@@ -10,6 +10,22 @@ interface UserRow {
   updated_at: Date;
 }
 
+interface CreateUserInput {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  phone: string | null;
+}
+
+interface UpdateUserInput {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  phone: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -66,5 +82,55 @@ export const UserService = {
     }
 
     return this.getUserByEmail(email);
+  },
+
+  // Returns all users for administrative management screens.
+  async listUsers(): Promise<UserRow[]> {
+    const result = await queryDatabase<UserRow>(
+      `SELECT id, email, full_name, role, phone, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC`,
+    );
+
+    return result.rows;
+  },
+
+  // Persists a provisioned user record linked to Firebase UID.
+  async createUser(input: CreateUserInput): Promise<UserRow> {
+    const result = await queryDatabase<UserRow>(
+      `INSERT INTO users (id, email, full_name, role, phone)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, full_name, role, phone, created_at, updated_at`,
+      [input.id, input.email, input.fullName, input.role, input.phone],
+    );
+
+    return result.rows[0] as UserRow;
+  },
+
+  // Updates an existing user profile by id.
+  async updateUser(input: UpdateUserInput): Promise<UserRow | null> {
+    const result = await queryDatabase<UserRow>(
+      `UPDATE users
+       SET email = $2,
+           full_name = $3,
+           role = $4,
+           phone = $5,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, email, full_name, role, phone, created_at, updated_at`,
+      [input.id, input.email, input.fullName, input.role, input.phone],
+    );
+
+    return result.rows[0] ?? null;
+  },
+
+  // Deletes a user profile by id.
+  async deleteUser(userId: string): Promise<boolean> {
+    const result = await queryDatabase<{ id: string }>(
+      `DELETE FROM users WHERE id = $1 RETURNING id`,
+      [userId],
+    );
+
+    return result.rows.length > 0;
   },
 };
