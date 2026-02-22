@@ -25,8 +25,17 @@ export const chatController = {
       return res.status(400).json(parsed.error.format());
     }
 
+    if (!req.authUser?.uid) {
+      return res.status(401).json({ error: "Missing authenticated user" });
+    }
+
     try {
       const { userId, message } = parsed.data;
+
+      if (userId !== req.authUser.uid) {
+        return res.status(403).json({ error: "You can access only your own conversation" });
+      }
+
       const response = await ChatService.sendMessage({ userId, message });
 
       return res.status(200).json(response);
@@ -54,6 +63,14 @@ export const chatController = {
 
     if (!parsed.success) {
       return res.status(400).json(parsed.error.format());
+    }
+
+    if (!req.authUser?.uid) {
+      return res.status(401).json({ error: "Missing authenticated user" });
+    }
+
+    if (parsed.data.userId !== req.authUser.uid) {
+      return res.status(403).json({ error: "You can access only your own conversation" });
     }
 
     try {

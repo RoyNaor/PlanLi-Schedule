@@ -24,7 +24,7 @@ router.get("/api/health/database", getDatabaseHealth);
 router.post("/api/users/sync", requireAuth, userController.syncAuthenticatedUser);
 router.get("/api/users/me", requireAuth, userController.getAuthenticatedUser);
 
-router.post("/api/chat", chatController.sendMessage);
-router.get("/api/chat/:userId", chatController.getConversation);
+router.post("/api/chat", requireAuth, chatController.sendMessage);
+router.get("/api/chat/:userId", requireAuth, chatController.getConversation);
 
 export default router;

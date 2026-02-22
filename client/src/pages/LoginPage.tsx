@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { Lock, Mail } from "lucide-react";
@@ -12,6 +12,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (AuthService.getSession()) {
+      navigate("/chat", { replace: true });
+    }
+  }, [navigate]);
 
   // Submits credentials, stores the session, and redirects to the chat page.
   const handleSubmit = async (e: React.FormEvent) => {

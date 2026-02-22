@@ -1,4 +1,6 @@
 import axios from "axios";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebase";
 
 export interface SessionUser {
   id: string;
@@ -49,7 +51,13 @@ export const AuthService = {
   },
 
   // Removes stored session data and emits a global session-changed event.
-  clearSession() {
+  async clearSession() {
+    try {
+      await signOut(auth);
+    } catch {
+      // Ignore provider sign-out failures and still clear local session data.
+    }
+
     sessionStorage.removeItem(SESSION_KEY);
     window.dispatchEvent(new Event("planli:session-changed"));
   },

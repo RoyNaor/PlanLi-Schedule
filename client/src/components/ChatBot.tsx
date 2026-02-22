@@ -28,7 +28,7 @@ const STARTER_MESSAGE: ChatMessage = {
 export function ChatBot() {
   const storedSession = AuthService.getSession();
   const [sessionUser] = useState<SessionUser | null>(storedSession?.user ?? null);
-  const [userId, setUserId] = useState(storedSession?.user.id ?? "");
+  const [userId] = useState(storedSession?.user.id ?? "");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -135,7 +135,6 @@ export function ChatBot() {
       <ChatHeader
         userId={userId}
         displayName={sessionUser?.fullName}
-        onUserIdChange={setUserId}
         onLoadConversation={loadConversation}
         loading={loading}
       />
