@@ -33,6 +33,7 @@ const emptyShiftForm = {
 
 export default function ShiftPage() {
   const session = AuthService.getSession();
+  const token = session?.jwtToken ?? "";
   const [weeks, setWeeks] = useState<WeekSummary[]>([]);
   const [selectedWeek, setSelectedWeek] = useState("");
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -44,12 +45,12 @@ export default function ShiftPage() {
   const [shiftFormData, setShiftFormData] = useState(emptyShiftForm);
 
   const authHeaders = useMemo(
-    () => ({ Authorization: `Bearer ${session?.jwtToken ?? ""}` }),
-    [session?.jwtToken],
+    () => ({ Authorization: `Bearer ${token}` }),
+    [token],
   );
 
   const fetchWeeks = useCallback(async () => {
-    if (!session) {
+    if (!token) {
       return;
     }
 
@@ -60,24 +61,25 @@ export default function ShiftPage() {
       });
       const loadedWeeks = response.data.weeks;
       setWeeks(loadedWeeks);
+      setSelectedWeek((currentWeek) => {
+        if (!currentWeek) {
+          return loadedWeeks[0]?.weekStart ?? "";
+        }
 
-      if (!selectedWeek && loadedWeeks.length > 0) {
-        setSelectedWeek(loadedWeeks[0].weekStart);
-      }
-
-      if (selectedWeek && !loadedWeeks.some((week) => week.weekStart === selectedWeek)) {
-        setSelectedWeek(loadedWeeks[0]?.weekStart ?? "");
-      }
+        return loadedWeeks.some((week) => week.weekStart === currentWeek)
+          ? currentWeek
+          : (loadedWeeks[0]?.weekStart ?? "");
+      });
     } catch (error: any) {
       console.error("Error loading weeks:", error);
       alert(`שגיאה בטעינת השבועות: ${error.response?.data?.error ?? "Unknown error"}`);
     } finally {
       setLoadingWeeks(false);
     }
-  }, [authHeaders, selectedWeek, session]);
+  }, [authHeaders, token]);
 
   const fetchShifts = useCallback(async () => {
-    if (!session || !selectedWeek) {
+    if (!token || !selectedWeek) {
       setShifts([]);
       return;
     }
@@ -97,7 +99,7 @@ export default function ShiftPage() {
     } finally {
       setLoadingShifts(false);
     }
-  }, [authHeaders, selectedWeek, session]);
+  }, [authHeaders, selectedWeek, token]);
 
   useEffect(() => {
     void fetchWeeks();
