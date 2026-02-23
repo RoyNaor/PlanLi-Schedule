@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
-import { CalendarDays, Clock3, Pencil, Plus, Trash2, Users } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
 type WeekSummary = {
@@ -22,6 +32,7 @@ type Shift = {
 };
 
 const API_BASE = "http://localhost:3000/api";
+const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 
 const emptyShiftForm = {
   shift_date: "",
@@ -31,6 +42,81 @@ const emptyShiftForm = {
   min_nurses: 1,
 };
 
+const weekDayLabels = ["יום א׳", "יום ב׳", "יום ג׳", "יום ד׳", "יום ה׳", "יום ו׳", "שבת"];
+const calendarWeekDayLabels = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+
+const dateFormatter = new Intl.DateTimeFormat("he-IL", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const monthFormatter = new Intl.DateTimeFormat("he-IL", {
+  month: "long",
+  year: "numeric",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const dayNumberFormatter = new Intl.DateTimeFormat("he-IL", {
+  day: "numeric",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const israelDatePartsFormatter = new Intl.DateTimeFormat("en", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+function parseIsoDateToUtc(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00Z`);
+}
+
+function formatUtcDateToIso(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysToIsoDate(isoDate: string, days: number) {
+  const date = parseIsoDateToUtc(isoDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatUtcDateToIso(date);
+}
+
+function startOfWeekSundayIso(isoDate: string) {
+  const date = parseIsoDateToUtc(isoDate);
+  const day = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() - day);
+  return formatUtcDateToIso(date);
+}
+
+function getWeekDates(weekStart: string) {
+  if (!weekStart) {
+    return [] as string[];
+  }
+
+  const start = parseIsoDateToUtc(weekStart);
+  if (Number.isNaN(start.getTime())) {
+    return [] as string[];
+  }
+
+  return Array.from({ length: 7 }, (_, index) => addDaysToIsoDate(weekStart, index));
+}
+
+function getIsraelTodayIso() {
+  const parts = israelDatePartsFormatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return formatUtcDateToIso(new Date());
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function ShiftPage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
@@ -39,10 +125,14 @@ export default function ShiftPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loadingWeeks, setLoadingWeeks] = useState(true);
   const [loadingShifts, setLoadingShifts] = useState(false);
-  const [newWeekStart, setNewWeekStart] = useState("");
-  const [showShiftForm, setShowShiftForm] = useState(false);
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [showWeekModal, setShowWeekModal] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
   const [shiftFormData, setShiftFormData] = useState(emptyShiftForm);
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const israelToday = parseIsoDateToUtc(getIsraelTodayIso());
+    return new Date(Date.UTC(israelToday.getUTCFullYear(), israelToday.getUTCMonth(), 1));
+  });
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -59,7 +149,9 @@ export default function ShiftPage() {
       const response = await axios.get<{ weeks: WeekSummary[] }>(`${API_BASE}/weeks`, {
         headers: authHeaders,
       });
-      const loadedWeeks = response.data.weeks;
+      const loadedWeeks = [...response.data.weeks].sort((a, b) =>
+        a.weekStart.localeCompare(b.weekStart),
+      );
       setWeeks(loadedWeeks);
       setSelectedWeek((currentWeek) => {
         if (!currentWeek) {
@@ -109,33 +201,38 @@ export default function ShiftPage() {
     void fetchShifts();
   }, [fetchShifts]);
 
-  const resetShiftForm = () => {
-    setShiftFormData(emptyShiftForm);
-    setEditingShiftId(null);
-    setShowShiftForm(false);
-  };
+  const handleCreateWeek = useCallback(
+    async (weekStart: string) => {
+      try {
+        await axios.post(
+          `${API_BASE}/weeks`,
+          { week_start: weekStart },
+          { headers: authHeaders },
+        );
+        await fetchWeeks();
+        setSelectedWeek(weekStart);
+      } catch (error: any) {
+        if (error.response?.status === 409) {
+          setSelectedWeek(weekStart);
+          await fetchWeeks();
+          return;
+        }
 
-  const handleCreateWeek = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!newWeekStart) return;
+        console.error("Error creating week:", error);
+        alert(`שגיאה ביצירת שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
+      }
+    },
+    [authHeaders, fetchWeeks],
+  );
 
-    try {
-      await axios.post(
-        `${API_BASE}/weeks`,
-        { week_start: newWeekStart },
-        { headers: authHeaders },
-      );
-      setNewWeekStart("");
-      await fetchWeeks();
-      setSelectedWeek(newWeekStart);
-    } catch (error: any) {
-      console.error("Error creating week:", error);
-      alert(`שגיאה ביצירת שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
-    }
+  const handleCreateCurrentWeek = async () => {
+    const israelToday = getIsraelTodayIso();
+    const currentWeekStart = startOfWeekSundayIso(israelToday);
+    await handleCreateWeek(currentWeekStart);
   };
 
   const handleDeleteWeek = async (weekStart: string) => {
-    const confirmed = window.confirm("האם למחוק את השבוע וכל המשמרות שלו?");
+    const confirmed = window.confirm("האם למחוק את השבוע וכל המשמרות שבו?");
     if (!confirmed) return;
 
     try {
@@ -144,16 +241,29 @@ export default function ShiftPage() {
         setSelectedWeek("");
       }
       await fetchWeeks();
+      await fetchShifts();
     } catch (error: any) {
       console.error("Error deleting week:", error);
       alert(`שגיאה במחיקת שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
     }
   };
 
+  const resetShiftForm = () => {
+    setShiftFormData(emptyShiftForm);
+    setEditingShiftId(null);
+    setShowShiftModal(false);
+  };
+
+  const openCreateShiftModal = (shiftDate: string) => {
+    setEditingShiftId(null);
+    setShiftFormData({ ...emptyShiftForm, shift_date: shiftDate });
+    setShowShiftModal(true);
+  };
+
   const handleSubmitShift = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedWeek) {
-      alert("יש לבחור שבוע קודם.");
+      alert("צריך לבחור או ליצור שבוע לפני הוספת משמרות.");
       return;
     }
 
@@ -191,7 +301,7 @@ export default function ShiftPage() {
       min_doctors: shift.minDoctors,
       min_nurses: shift.minNurses,
     });
-    setShowShiftForm(true);
+    setShowShiftModal(true);
   };
 
   const handleDeleteShift = async (shiftId: number) => {
@@ -208,30 +318,59 @@ export default function ShiftPage() {
     }
   };
 
+  const weekDates = useMemo(() => getWeekDates(selectedWeek), [selectedWeek]);
+
+  const shiftsByDate = useMemo(() => {
+    const grouped = new Map<string, Shift[]>();
+    shifts.forEach((shift) => {
+      const current = grouped.get(shift.shiftDate) ?? [];
+      current.push(shift);
+      grouped.set(shift.shiftDate, current);
+    });
+
+    grouped.forEach((items) => {
+      items.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    });
+
+    return grouped;
+  }, [shifts]);
+
+  const selectedWeekRange = useMemo(() => {
+    if (weekDates.length !== 7) {
+      return "בחר שבוע לתצוגה";
+    }
+
+    return `${dateFormatter.format(parseIsoDateToUtc(weekDates[0]))} - ${dateFormatter.format(parseIsoDateToUtc(weekDates[6]))}`;
+  }, [weekDates]);
+
+  const selectedWeekIndex = weeks.findIndex((week) => week.weekStart === selectedWeek);
+
+  const monthFirstIso = `${monthCursor.getUTCFullYear()}-${String(monthCursor.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const calendarStartIso = startOfWeekSundayIso(monthFirstIso);
+  const calendarDays = Array.from({ length: 35 }, (_, index) => addDaysToIsoDate(calendarStartIso, index));
+
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
 
   const totalShifts = weeks.reduce((sum, week) => sum + week.shiftsCount, 0);
 
   return (
-    <div className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
+    <div dir="rtl" className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">ניהול שבועות ומשמרות</h1>
-            <p className="text-slate-500 mt-1">ניהול מלא של שבועות תכנון ומשמרות צוות.</p>
+            <h1 className="text-3xl font-bold text-slate-900">מתכנן משמרות שבועי</h1>
+            <p className="text-slate-500 mt-1">ניהול שבועות ומשמרות עם הוספה מהירה לכל יום.</p>
           </div>
 
-          {!showShiftForm ? (
-            <button
-              type="button"
-              onClick={() => setShowShiftForm(true)}
-              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
-            >
-              <Plus className="w-5 h-5" />
-              הוסף משמרת
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => void handleCreateCurrentWeek()}
+            className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            שבוע נוכחי
+          </button>
         </div>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -266,27 +405,115 @@ export default function ShiftPage() {
           </article>
         </section>
 
-        <section className="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
-          <h2 className="text-xl font-semibold mb-4">יצירת שבוע חדש</h2>
-          <form onSubmit={handleCreateWeek} className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="date"
-              value={newWeekStart}
-              onChange={(event) => setNewWeekStart(event.target.value)}
-              required
-              className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-            />
+        <section className="bg-white border-2 border-slate-800 rounded-2xl p-4 md:p-6 shadow-sm">
+          <div className="flex flex-wrap gap-3 justify-between items-center">
             <button
-              type="submit"
-              className="bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors"
+              type="button"
+              onClick={() => {
+                const previousWeek = weeks[selectedWeekIndex - 1];
+                if (previousWeek) setSelectedWeek(previousWeek.weekStart);
+              }}
+              disabled={selectedWeekIndex <= 0}
+              className="w-11 h-11 rounded-xl border border-slate-300 flex items-center justify-center disabled:opacity-40"
             >
-              הוסף שבוע
+              <ChevronRight className="w-5 h-5" />
             </button>
-          </form>
+
+            <button
+              type="button"
+              onClick={() => setShowWeekModal(true)}
+              className="flex items-center gap-2 text-lg font-semibold text-slate-900"
+            >
+              <CalendarDays className="w-5 h-5 text-emerald-600" />
+              {selectedWeekRange}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextWeek = weeks[selectedWeekIndex + 1];
+                if (nextWeek) setSelectedWeek(nextWeek.weekStart);
+              }}
+              disabled={selectedWeekIndex < 0 || selectedWeekIndex >= weeks.length - 1}
+              className="w-11 h-11 rounded-xl border border-slate-300 flex items-center justify-center disabled:opacity-40"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          </div>
+        </section>
+
+        <section className="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="grid grid-cols-7 border-b-2 border-slate-800">
+            {weekDates.map((isoDate, index) => (
+              <div key={isoDate} className="p-4 text-center border-l border-slate-300 last:border-l-0">
+                <p className="text-sm text-slate-600">{weekDayLabels[index]}</p>
+                <p className="text-2xl font-semibold text-slate-900 mt-1">
+                  {dayNumberFormatter.format(parseIsoDateToUtc(isoDate))}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {loadingShifts ? (
+            <p className="p-6 text-slate-500">טוען משמרות...</p>
+          ) : !selectedWeek ? (
+            <p className="p-6 text-slate-500">בחר שבוע או צור שבוע חדש כדי להתחיל.</p>
+          ) : (
+            <div className="grid grid-cols-7 min-h-[460px]">
+              {weekDates.map((shiftDate) => {
+                const dayShifts = shiftsByDate.get(shiftDate) ?? [];
+
+                return (
+                  <div key={shiftDate} className="border-l border-slate-300 last:border-l-0 p-3 flex flex-col gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openCreateShiftModal(shiftDate)}
+                      className="w-full border-2 border-dashed border-slate-300 rounded-xl py-2 text-slate-600 hover:border-emerald-500 hover:text-emerald-700 transition-colors"
+                    >
+                      + הוספה
+                    </button>
+
+                    <div className="space-y-2">
+                      {dayShifts.map((shift) => (
+                        <article
+                          key={shift.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs space-y-1"
+                        >
+                          <p className="font-semibold text-slate-800">
+                            {shift.startTime} - {shift.endTime}
+                          </p>
+                          <p className="text-slate-600">רופאים: {shift.minDoctors}</p>
+                          <p className="text-slate-600">אחיות: {shift.minNurses}</p>
+                          <div className="flex items-center justify-end gap-1 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleEditShift(shift)}
+                              className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-700"
+                              title="עריכת משמרת"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteShift(shift.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-100 text-red-700"
+                              title="מחיקת משמרת"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
-          <h2 className="text-xl font-semibold mb-4">שבועות קיימים</h2>
+          <h2 className="text-xl font-semibold mb-4">רשימת שבועות קיימים</h2>
           {loadingWeeks ? (
             <p className="text-slate-500">טוען שבועות...</p>
           ) : weeks.length === 0 ? (
@@ -314,7 +541,7 @@ export default function ShiftPage() {
 
                   <button
                     type="button"
-                    onClick={() => handleDeleteWeek(week.weekStart)}
+                    onClick={() => void handleDeleteWeek(week.weekStart)}
                     className="mt-4 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-red-700 bg-red-50 hover:bg-red-100"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -325,26 +552,33 @@ export default function ShiftPage() {
             </div>
           )}
         </section>
+      </div>
 
-        {showShiftForm ? (
-          <section className="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">
-                {editingShiftId ? "עריכת משמרת" : "הוספת משמרת חדשה"}
-              </h2>
+      {showShiftModal ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 flex items-center justify-center px-4">
+          <section className="w-full max-w-xl bg-white rounded-2xl border-2 border-slate-800 shadow-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-3xl font-semibold text-slate-900">
+                  {editingShiftId ? "עריכת משמרת" : "הוספת משמרת"}
+                </h2>
+                <p className="text-slate-600 mt-1">
+                  {shiftFormData.shift_date
+                    ? dateFormatter.format(parseIsoDateToUtc(shiftFormData.shift_date))
+                    : ""}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={resetShiftForm}
-                className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                className="text-slate-700 hover:text-slate-900"
+                aria-label="סגירת חלון"
               >
-                ביטול
+                <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form
-              onSubmit={handleSubmitShift}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4"
-            >
+            <form onSubmit={handleSubmitShift} className="mt-6 space-y-4">
               <input
                 type="date"
                 required
@@ -352,117 +586,175 @@ export default function ShiftPage() {
                 onChange={(event) =>
                   setShiftFormData((prev) => ({ ...prev, shift_date: event.target.value }))
                 }
-                className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
               />
-              <input
-                type="time"
-                required
-                value={shiftFormData.start_time}
-                onChange={(event) =>
-                  setShiftFormData((prev) => ({ ...prev, start_time: event.target.value }))
-                }
-                className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-              />
-              <input
-                type="time"
-                required
-                value={shiftFormData.end_time}
-                onChange={(event) =>
-                  setShiftFormData((prev) => ({ ...prev, end_time: event.target.value }))
-                }
-                className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-              />
-              <input
-                type="number"
-                min={0}
-                value={shiftFormData.min_doctors}
-                onChange={(event) =>
-                  setShiftFormData((prev) => ({
-                    ...prev,
-                    min_doctors: Number(event.target.value),
-                  }))
-                }
-                className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-                placeholder="מינ׳ רופאים"
-              />
-              <input
-                type="number"
-                min={0}
-                value={shiftFormData.min_nurses}
-                onChange={(event) =>
-                  setShiftFormData((prev) => ({
-                    ...prev,
-                    min_nurses: Number(event.target.value),
-                  }))
-                }
-                className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-                placeholder="מינ׳ אחיות"
-              />
-              <button
-                type="submit"
-                className="md:col-span-2 lg:col-span-5 bg-emerald-600 text-white px-4 py-3 rounded-xl hover:bg-emerald-700 transition-colors"
-              >
-                {editingShiftId ? "שמור שינויים" : "צור משמרת"}
-              </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה</label>
+                  <input
+                    type="time"
+                    required
+                    value={shiftFormData.start_time}
+                    onChange={(event) =>
+                      setShiftFormData((prev) => ({ ...prev, start_time: event.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">שעת סיום</label>
+                  <input
+                    type="time"
+                    required
+                    value={shiftFormData.end_time}
+                    onChange={(event) =>
+                      setShiftFormData((prev) => ({ ...prev, end_time: event.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">מינימום רופאים</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={shiftFormData.min_doctors}
+                    onChange={(event) =>
+                      setShiftFormData((prev) => ({
+                        ...prev,
+                        min_doctors: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">מינימום אחיות</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={shiftFormData.min_nurses}
+                    onChange={(event) =>
+                      setShiftFormData((prev) => ({
+                        ...prev,
+                        min_nurses: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={resetShiftForm}
+                  className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-50"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  {editingShiftId ? "שמור" : "הוסף משמרת"}
+                </button>
+              </div>
             </form>
           </section>
-        ) : null}
+        </div>
+      ) : null}
 
-        <section className="bg-white p-6 rounded-2xl shadow-md border border-slate-200">
-          <h2 className="text-xl font-semibold mb-4">משמרות לשבוע {selectedWeek || "-"}</h2>
-          {loadingShifts ? (
-            <p className="text-slate-500">טוען משמרות...</p>
-          ) : shifts.length === 0 ? (
-            <p className="text-slate-500">אין משמרות לשבוע זה.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-slate-500 border-b border-slate-200">
-                    <th className="text-right py-2">תאריך</th>
-                    <th className="text-right py-2">שעה</th>
-                    <th className="text-right py-2">רופאים</th>
-                    <th className="text-right py-2">אחיות</th>
-                    <th className="text-right py-2">פעולות</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shifts.map((shift) => (
-                    <tr key={shift.id} className="border-b border-slate-100">
-                      <td className="py-3 text-slate-900">{shift.shiftDate}</td>
-                      <td className="py-3 text-slate-900">
-                        {shift.startTime} - {shift.endTime}
-                      </td>
-                      <td className="py-3 text-slate-900">{shift.minDoctors}</td>
-                      <td className="py-3 text-slate-900">{shift.minNurses}</td>
-                      <td className="py-3">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditShift(shift)}
-                            className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100"
-                          >
-                            <Pencil className="w-4 h-4" />
-                            ערוך
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteShift(shift.id)}
-                            className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-red-700 bg-red-50 hover:bg-red-100"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            מחק
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {showWeekModal ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 flex items-center justify-center px-4">
+          <section className="w-full max-w-xl bg-white rounded-2xl border-2 border-slate-800 shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-3xl font-semibold text-slate-900">בחירת שבוע</h2>
+              <button type="button" onClick={() => setShowWeekModal(false)} className="text-slate-700">
+                <X className="w-6 h-6" />
+              </button>
             </div>
-          )}
-        </section>
-      </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setMonthCursor((prev) =>
+                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() - 1, 1)),
+                  )
+                }
+                className="w-10 h-10 rounded-xl border border-slate-300 flex items-center justify-center"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              <p className="text-lg font-semibold">{monthFormatter.format(monthCursor)}</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setMonthCursor((prev) =>
+                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + 1, 1)),
+                  )
+                }
+                className="w-10 h-10 rounded-xl border border-slate-300 flex items-center justify-center"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 text-center text-slate-500 mb-2">
+              {calendarWeekDayLabels.map((label) => (
+                <p key={label} className="text-sm">
+                  {label}
+                </p>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {calendarDays.map((isoDate) => {
+                const date = parseIsoDateToUtc(isoDate);
+                const weekStart = startOfWeekSundayIso(isoDate);
+                const inCurrentMonth =
+                  date.getUTCMonth() === monthCursor.getUTCMonth() &&
+                  date.getUTCFullYear() === monthCursor.getUTCFullYear();
+                const isSelected = selectedWeek === weekStart;
+
+                return (
+                  <button
+                    key={isoDate}
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        const weekExists = weeks.some((week) => week.weekStart === weekStart);
+                        if (weekExists) {
+                          setSelectedWeek(weekStart);
+                        } else {
+                          await handleCreateWeek(weekStart);
+                        }
+                        setShowWeekModal(false);
+                      })();
+                    }}
+                    className={`h-11 rounded-lg text-sm font-medium ${
+                      isSelected
+                        ? "bg-emerald-600 text-white"
+                        : inCurrentMonth
+                          ? "bg-slate-100 text-slate-900 hover:bg-emerald-100"
+                          : "bg-slate-50 text-slate-400"
+                    }`}
+                  >
+                    {dayNumberFormatter.format(date)}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
