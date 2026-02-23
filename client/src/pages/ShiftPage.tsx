@@ -42,7 +42,15 @@ const emptyShiftForm = {
   min_nurses: 1,
 };
 
-const weekDayLabels = ["יום א׳", "יום ב׳", "יום ג׳", "יום ד׳", "יום ה׳", "יום ו׳", "שבת"];
+const weekDayLabels = [
+  "יום א׳",
+  "יום ב׳",
+  "יום ג׳",
+  "יום ד׳",
+  "יום ה׳",
+  "יום ו׳",
+  "שבת",
+];
 const calendarWeekDayLabels = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 
 const dateFormatter = new Intl.DateTimeFormat("he-IL", {
@@ -101,7 +109,9 @@ function getWeekDates(weekStart: string) {
     return [] as string[];
   }
 
-  return Array.from({ length: 7 }, (_, index) => addDaysToIsoDate(weekStart, index));
+  return Array.from({ length: 7 }, (_, index) =>
+    addDaysToIsoDate(weekStart, index),
+  );
 }
 
 function getIsraelTodayIso() {
@@ -122,7 +132,9 @@ export default function ShiftPage() {
   const [shiftFormData, setShiftFormData] = useState(emptyShiftForm);
   const [monthCursor, setMonthCursor] = useState(() => {
     const israelToday = parseIsoDateToUtc(getIsraelTodayIso());
-    return new Date(Date.UTC(israelToday.getUTCFullYear(), israelToday.getUTCMonth(), 1));
+    return new Date(
+      Date.UTC(israelToday.getUTCFullYear(), israelToday.getUTCMonth(), 1),
+    );
   });
 
   const authHeaders = useMemo(
@@ -137,9 +149,12 @@ export default function ShiftPage() {
 
     try {
       setLoadingWeeks(true);
-      const response = await axios.get<{ weeks: WeekSummary[] }>(`${API_BASE}/weeks`, {
-        headers: authHeaders,
-      });
+      const response = await axios.get<{ weeks: WeekSummary[] }>(
+        `${API_BASE}/weeks`,
+        {
+          headers: authHeaders,
+        },
+      );
       const loadedWeeks = [...response.data.weeks].sort((a, b) =>
         a.weekStart.localeCompare(b.weekStart),
       );
@@ -155,7 +170,9 @@ export default function ShiftPage() {
       });
     } catch (error: any) {
       console.error("Error loading weeks:", error);
-      alert(`שגיאה בטעינת השבועות: ${error.response?.data?.error ?? "Unknown error"}`);
+      alert(
+        `שגיאה בטעינת השבועות: ${error.response?.data?.error ?? "Unknown error"}`,
+      );
     } finally {
       setLoadingWeeks(false);
     }
@@ -178,7 +195,9 @@ export default function ShiftPage() {
       setShifts(response.data.shifts);
     } catch (error: any) {
       console.error("Error loading shifts:", error);
-      alert(`שגיאה בטעינת המשמרות: ${error.response?.data?.error ?? "Unknown error"}`);
+      alert(
+        `שגיאה בטעינת המשמרות: ${error.response?.data?.error ?? "Unknown error"}`,
+      );
     } finally {
       setLoadingShifts(false);
     }
@@ -210,7 +229,9 @@ export default function ShiftPage() {
         }
 
         console.error("Error creating week:", error);
-        alert(`שגיאה ביצירת שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
+        alert(
+          `שגיאה ביצירת שבוע: ${error.response?.data?.error ?? "Unknown error"}`,
+        );
       }
     },
     [authHeaders, fetchWeeks],
@@ -227,7 +248,9 @@ export default function ShiftPage() {
     if (!confirmed) return;
 
     try {
-      await axios.delete(`${API_BASE}/weeks/${weekStart}`, { headers: authHeaders });
+      await axios.delete(`${API_BASE}/weeks/${weekStart}`, {
+        headers: authHeaders,
+      });
       if (selectedWeek === weekStart) {
         setSelectedWeek("");
       }
@@ -235,7 +258,9 @@ export default function ShiftPage() {
       await fetchShifts();
     } catch (error: any) {
       console.error("Error deleting week:", error);
-      alert(`שגיאה במחיקת שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
+      alert(
+        `שגיאה במחיקת שבוע: ${error.response?.data?.error ?? "Unknown error"}`,
+      );
     }
   };
 
@@ -279,7 +304,9 @@ export default function ShiftPage() {
       await fetchShifts();
     } catch (error: any) {
       console.error("Error saving shift:", error);
-      alert(`שגיאה בשמירת משמרת: ${error.response?.data?.error ?? "Unknown error"}`);
+      alert(
+        `שגיאה בשמירת משמרת: ${error.response?.data?.error ?? "Unknown error"}`,
+      );
     }
   };
 
@@ -300,12 +327,16 @@ export default function ShiftPage() {
     if (!confirmed) return;
 
     try {
-      await axios.delete(`${API_BASE}/shifts/${shiftId}`, { headers: authHeaders });
+      await axios.delete(`${API_BASE}/shifts/${shiftId}`, {
+        headers: authHeaders,
+      });
       await fetchWeeks();
       await fetchShifts();
     } catch (error: any) {
       console.error("Error deleting shift:", error);
-      alert(`שגיאה במחיקת משמרת: ${error.response?.data?.error ?? "Unknown error"}`);
+      alert(
+        `שגיאה במחיקת משמרת: ${error.response?.data?.error ?? "Unknown error"}`,
+      );
     }
   };
 
@@ -334,11 +365,15 @@ export default function ShiftPage() {
     return `${dateFormatter.format(parseIsoDateToUtc(weekDates[0]))} - ${dateFormatter.format(parseIsoDateToUtc(weekDates[6]))}`;
   }, [weekDates]);
 
-  const selectedWeekIndex = weeks.findIndex((week) => week.weekStart === selectedWeek);
+  const selectedWeekIndex = weeks.findIndex(
+    (week) => week.weekStart === selectedWeek,
+  );
 
   const monthFirstIso = `${monthCursor.getUTCFullYear()}-${String(monthCursor.getUTCMonth() + 1).padStart(2, "0")}-01`;
   const calendarStartIso = startOfWeekSundayIso(monthFirstIso);
-  const calendarDays = Array.from({ length: 35 }, (_, index) => addDaysToIsoDate(calendarStartIso, index));
+  const calendarDays = Array.from({ length: 35 }, (_, index) =>
+    addDaysToIsoDate(calendarStartIso, index),
+  );
 
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
@@ -350,8 +385,10 @@ export default function ShiftPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">מתכנן משמרות שבועי</h1>
-            <p className="text-slate-500 mt-1">ניהול שבועות ומשמרות עם הוספה מהירה לכל יום.</p>
+            <h1 className="text-3xl font-bold text-slate-900">ניהול משמרות</h1>
+            <p className="text-slate-500 mt-1">
+              ניהול שבועות ומשמרות עם הוספה מהירה לכל יום.
+            </p>
           </div>
 
           <button
@@ -359,42 +396,9 @@ export default function ShiftPage() {
             onClick={() => void handleCreateCurrentWeek()}
             className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
           >
-            <Plus className="w-5 h-5" />
-            שבוע נוכחי
+            בחירה בשבוע הנוכחי
           </button>
         </div>
-
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">שבועות מתוכננים</p>
-              <span className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <CalendarDays className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">{weeks.length}</p>
-          </article>
-
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">סה״כ משמרות</p>
-              <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                <Clock3 className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">{totalShifts}</p>
-          </article>
-
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">שבוע נבחר</p>
-              <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-lg font-semibold text-slate-900 mt-3">{selectedWeek || "לא נבחר"}</p>
-          </article>
-        </section>
 
         <section className="bg-white border-2 border-slate-800 rounded-2xl p-4 md:p-6 shadow-sm">
           <div className="flex flex-wrap gap-3 justify-between items-center">
@@ -425,7 +429,9 @@ export default function ShiftPage() {
                 const nextWeek = weeks[selectedWeekIndex + 1];
                 if (nextWeek) setSelectedWeek(nextWeek.weekStart);
               }}
-              disabled={selectedWeekIndex < 0 || selectedWeekIndex >= weeks.length - 1}
+              disabled={
+                selectedWeekIndex < 0 || selectedWeekIndex >= weeks.length - 1
+              }
               className="w-11 h-11 rounded-xl border border-slate-300 flex items-center justify-center disabled:opacity-40"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -436,7 +442,10 @@ export default function ShiftPage() {
         <section className="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="grid grid-cols-7 border-b-2 border-slate-800">
             {weekDates.map((isoDate, index) => (
-              <div key={isoDate} className="p-4 text-center border-l border-slate-300 last:border-l-0">
+              <div
+                key={isoDate}
+                className="p-4 text-center border-l border-slate-300 last:border-l-0"
+              >
                 <p className="text-sm text-slate-600">{weekDayLabels[index]}</p>
                 <p className="text-2xl font-semibold text-slate-900 mt-1">
                   {dayNumberFormatter.format(parseIsoDateToUtc(isoDate))}
@@ -448,14 +457,19 @@ export default function ShiftPage() {
           {loadingShifts ? (
             <p className="p-6 text-slate-500">טוען משמרות...</p>
           ) : !selectedWeek ? (
-            <p className="p-6 text-slate-500">בחר שבוע או צור שבוע חדש כדי להתחיל.</p>
+            <p className="p-6 text-slate-500">
+              בחר שבוע או צור שבוע חדש כדי להתחיל.
+            </p>
           ) : (
             <div className="grid grid-cols-7 min-h-[460px]">
               {weekDates.map((shiftDate) => {
                 const dayShifts = shiftsByDate.get(shiftDate) ?? [];
 
                 return (
-                  <div key={shiftDate} className="border-l border-slate-300 last:border-l-0 p-3 flex flex-col gap-3">
+                  <div
+                    key={shiftDate}
+                    className="border-l border-slate-300 last:border-l-0 p-3 flex flex-col gap-3"
+                  >
                     <button
                       type="button"
                       onClick={() => openCreateShiftModal(shiftDate)}
@@ -473,8 +487,12 @@ export default function ShiftPage() {
                           <p className="font-semibold text-slate-800">
                             {shift.startTime} - {shift.endTime}
                           </p>
-                          <p className="text-slate-600">רופאים: {shift.minDoctors}</p>
-                          <p className="text-slate-600">אחיות: {shift.minNurses}</p>
+                          <p className="text-slate-600">
+                            רופאים: {shift.minDoctors}
+                          </p>
+                          <p className="text-slate-600">
+                            אחיות: {shift.minNurses}
+                          </p>
                           <div className="flex items-center justify-end gap-1 pt-1">
                             <button
                               type="button"
@@ -526,8 +544,12 @@ export default function ShiftPage() {
                     onClick={() => setSelectedWeek(week.weekStart)}
                   >
                     <p className="text-sm text-slate-500">שבוע התחלה</p>
-                    <p className="text-lg font-semibold text-slate-900">{week.weekStart}</p>
-                    <p className="text-sm text-slate-600 mt-1">משמרות: {week.shiftsCount}</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {week.weekStart}
+                    </p>
+                    <p className="text-sm text-slate-600 mt-1">
+                      משמרות: {week.shiftsCount}
+                    </p>
                   </button>
 
                   <button
@@ -555,7 +577,9 @@ export default function ShiftPage() {
                 </h2>
                 <p className="text-slate-600 mt-1">
                   {shiftFormData.shift_date
-                    ? dateFormatter.format(parseIsoDateToUtc(shiftFormData.shift_date))
+                    ? dateFormatter.format(
+                        parseIsoDateToUtc(shiftFormData.shift_date),
+                      )
                     : ""}
                 </p>
               </div>
@@ -575,33 +599,46 @@ export default function ShiftPage() {
                 required
                 value={shiftFormData.shift_date}
                 onChange={(event) =>
-                  setShiftFormData((prev) => ({ ...prev, shift_date: event.target.value }))
+                  setShiftFormData((prev) => ({
+                    ...prev,
+                    shift_date: event.target.value,
+                  }))
                 }
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    שעת התחלה
+                  </label>
                   <input
                     type="time"
                     required
                     value={shiftFormData.start_time}
                     onChange={(event) =>
-                      setShiftFormData((prev) => ({ ...prev, start_time: event.target.value }))
+                      setShiftFormData((prev) => ({
+                        ...prev,
+                        start_time: event.target.value,
+                      }))
                     }
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                     dir="ltr"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">שעת סיום</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    שעת סיום
+                  </label>
                   <input
                     type="time"
                     required
                     value={shiftFormData.end_time}
                     onChange={(event) =>
-                      setShiftFormData((prev) => ({ ...prev, end_time: event.target.value }))
+                      setShiftFormData((prev) => ({
+                        ...prev,
+                        end_time: event.target.value,
+                      }))
                     }
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                     dir="ltr"
@@ -611,7 +648,9 @@ export default function ShiftPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">מינימום רופאים</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    מינימום רופאים
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -626,7 +665,9 @@ export default function ShiftPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">מינימום אחיות</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    מינימום אחיות
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -666,8 +707,14 @@ export default function ShiftPage() {
         <div className="fixed inset-0 z-50 bg-slate-900/45 flex items-center justify-center px-4">
           <section className="w-full max-w-xl bg-white rounded-2xl border-2 border-slate-800 shadow-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-3xl font-semibold text-slate-900">בחירת שבוע</h2>
-              <button type="button" onClick={() => setShowWeekModal(false)} className="text-slate-700">
+              <h2 className="text-3xl font-semibold text-slate-900">
+                בחירת שבוע
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowWeekModal(false)}
+                className="text-slate-700"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -676,20 +723,36 @@ export default function ShiftPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setMonthCursor((prev) =>
-                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() - 1, 1)),
+                  setMonthCursor(
+                    (prev) =>
+                      new Date(
+                        Date.UTC(
+                          prev.getUTCFullYear(),
+                          prev.getUTCMonth() - 1,
+                          1,
+                        ),
+                      ),
                   )
                 }
                 className="w-10 h-10 rounded-xl border border-slate-300 flex items-center justify-center"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
-              <p className="text-lg font-semibold">{monthFormatter.format(monthCursor)}</p>
+              <p className="text-lg font-semibold">
+                {monthFormatter.format(monthCursor)}
+              </p>
               <button
                 type="button"
                 onClick={() =>
-                  setMonthCursor((prev) =>
-                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + 1, 1)),
+                  setMonthCursor(
+                    (prev) =>
+                      new Date(
+                        Date.UTC(
+                          prev.getUTCFullYear(),
+                          prev.getUTCMonth() + 1,
+                          1,
+                        ),
+                      ),
                   )
                 }
                 className="w-10 h-10 rounded-xl border border-slate-300 flex items-center justify-center"
@@ -721,7 +784,9 @@ export default function ShiftPage() {
                     type="button"
                     onClick={() => {
                       void (async () => {
-                        const weekExists = weeks.some((week) => week.weekStart === weekStart);
+                        const weekExists = weeks.some(
+                          (week) => week.weekStart === weekStart,
+                        );
                         if (weekExists) {
                           setSelectedWeek(weekStart);
                         } else {
