@@ -18,6 +18,8 @@ const createShiftSchema = z.object({
   min_nurses: z.number().int().min(0).optional().default(1),
 });
 
+const updateShiftSchema = createShiftSchema.omit({ week_start: true });
+
 async function requireAdmin(req: Request, res: Response) {
   if (!req.authUser?.uid) {
     return { error: res.status(401).json({ error: "Missing authenticated user" }) };
@@ -55,6 +57,72 @@ function validateShiftPayload(payload: z.infer<typeof createShiftSchema>) {
 }
 
 export const shiftController = {
+  async listWeeks(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const weeks = await ShiftService.listWeeks();
+      return res.status(200).json({ weeks });
+    } catch (error) {
+      console.error("Error listing weeks:", error);
+      return res.status(500).json({ error: "Failed to fetch weeks" });
+    }
+  },
+
+  async createWeek(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const weekStart = typeof req.body?.week_start === "string" ? req.body.week_start : "";
+      if (!isIsoDateString(weekStart)) {
+        return res.status(400).json({ error: "week_start must be YYYY-MM-DD" });
+      }
+
+      const created = await ShiftService.ensureWeek(weekStart);
+      return res.status(201).json({
+        week: {
+          weekStart: created.week_start,
+          createdAt: created.created_at.toISOString(),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create week";
+      console.error("Error creating week:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async deleteWeek(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const rawWeekStart = req.params.weekStart;
+      const weekStart = typeof rawWeekStart === "string" ? rawWeekStart : "";
+      if (!isIsoDateString(weekStart)) {
+        return res.status(400).json({ error: "weekStart URL parameter must be YYYY-MM-DD" });
+      }
+
+      const deleted = await ShiftService.deleteWeek(weekStart);
+      if (!deleted) {
+        return res.status(404).json({ error: "Week not found" });
+      }
+
+      return res.status(200).json({ deleted: true, week_start: weekStart });
+    } catch (error) {
+      console.error("Error deleting week:", error);
+      return res.status(500).json({ error: "Failed to delete week" });
+    }
+  },
+
   // Creates one shift row under the given week_start schedule bucket.
   async createShift(req: Request, res: Response) {
     try {
@@ -117,6 +185,90 @@ export const shiftController = {
     } catch (error) {
       console.error("Error listing shifts by week:", error);
       return res.status(500).json({ error: "Failed to fetch shifts" });
+    }
+  },
+
+  async updateShift(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const shiftId = Number(req.params.shiftId);
+      if (!Number.isInteger(shiftId) || shiftId <= 0) {
+        return res.status(400).json({ error: "shiftId URL parameter must be a positive integer" });
+      }
+
+      const parsed = updateShiftSchema.parse(req.body);
+      if (!isIsoDateString(parsed.shift_date)) {
+        return res.status(400).json({ error: "shift_date must be valid ISO date (YYYY-MM-DD)" });
+      }
+
+      if (!isTimeString(parsed.start_time) || !isTimeString(parsed.end_time)) {
+        return res.status(400).json({ error: "start_time and end_time must use HH:mm format" });
+      }
+
+      if (parsed.start_time >= parsed.end_time) {
+        return res.status(400).json({ error: "start_time must be before end_time" });
+      }
+
+      const existing = await ShiftService.getShiftById(shiftId);
+      if (!existing) {
+        return res.status(404).json({ error: "Shift not found" });
+      }
+
+      if (!isDateInsideWeek(existing.weekStart, parsed.shift_date)) {
+        return res
+          .status(400)
+          .json({ error: "shift_date must be inside the existing week_start window" });
+      }
+
+      const updated = await ShiftService.updateShiftById(shiftId, {
+        shiftDate: parsed.shift_date,
+        startTime: parsed.start_time,
+        endTime: parsed.end_time,
+        minDoctors: parsed.min_doctors,
+        minNurses: parsed.min_nurses,
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: "Shift not found" });
+      }
+
+      return res.status(200).json({ shift: updated });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid payload", issues: error.issues });
+      }
+
+      const message = error instanceof Error ? error.message : "Failed to update shift";
+      console.error("Error updating shift:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async deleteShift(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const shiftId = Number(req.params.shiftId);
+      if (!Number.isInteger(shiftId) || shiftId <= 0) {
+        return res.status(400).json({ error: "shiftId URL parameter must be a positive integer" });
+      }
+
+      const deleted = await ShiftService.deleteShiftById(shiftId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Shift not found" });
+      }
+
+      return res.status(200).json({ deleted: true, shift_id: shiftId });
+    } catch (error) {
+      console.error("Error deleting shift:", error);
+      return res.status(500).json({ error: "Failed to delete shift" });
     }
   },
 };

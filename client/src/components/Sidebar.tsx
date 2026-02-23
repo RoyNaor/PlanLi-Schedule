@@ -1,4 +1,4 @@
-import { LogIn, LogOut, MessageCircle, ShieldUser, X } from "lucide-react";
+import { CalendarDays, LogIn, LogOut, MessageCircle, ShieldUser, X } from "lucide-react";
 
 type SidebarProps = {
   open: boolean;
@@ -75,14 +75,25 @@ export default function Sidebar({
           </button>
 
           {isAdmin ? (
-            <button
-              type="button"
-              className={`sidebar-link ${currentPath === "/users" ? "is-active" : ""}`}
-              onClick={() => handleNavigate("/users")}
-            >
-              <ShieldUser size={18} />
-              <span>ניהול משתמשים</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className={`sidebar-link ${currentPath === "/users" ? "is-active" : ""}`}
+                onClick={() => handleNavigate("/users")}
+              >
+                <ShieldUser size={18} />
+                <span>ניהול משתמשים</span>
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-link ${currentPath === "/shifts" ? "is-active" : ""}`}
+                onClick={() => handleNavigate("/shifts")}
+              >
+                <CalendarDays size={18} />
+                <span>ניהול משמרות</span>
+              </button>
+            </>
           ) : null}
         </nav>
 

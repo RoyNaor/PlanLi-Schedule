@@ -29,8 +29,14 @@ router.post("/api/users", requireAuth, userController.createUser);
 router.put("/api/users/:userId", requireAuth, userController.updateUser);
 router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
 
+router.get("/api/weeks", requireAuth, shiftController.listWeeks);
+router.post("/api/weeks", requireAuth, shiftController.createWeek);
+router.delete("/api/weeks/:weekStart", requireAuth, shiftController.deleteWeek);
+
 router.post("/api/shifts", requireAuth, shiftController.createShift);
 router.get("/api/shifts/week/:weekStart", requireAuth, shiftController.listShiftsByWeek);
+router.put("/api/shifts/:shiftId", requireAuth, shiftController.updateShift);
+router.delete("/api/shifts/:shiftId", requireAuth, shiftController.deleteShift);
 
 router.post("/api/chat", requireAuth, chatController.sendMessage);
 router.get("/api/chat/:userId", requireAuth, chatController.getConversation);
