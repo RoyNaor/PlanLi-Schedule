@@ -8,6 +8,7 @@ import {
 } from "./controllers/system.controller.js";
 import { chatController } from "./controllers/chat.controller.js";
 import { userController } from "./controllers/user.controller.js";
+import { shiftController } from "./controllers/shift.controller.js";
 import { requireAuth } from "./middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -27,6 +28,9 @@ router.get("/api/users", requireAuth, userController.listUsers);
 router.post("/api/users", requireAuth, userController.createUser);
 router.put("/api/users/:userId", requireAuth, userController.updateUser);
 router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
+
+router.post("/api/shifts", requireAuth, shiftController.createShift);
+router.get("/api/shifts/week/:weekStart", requireAuth, shiftController.listShiftsByWeek);
 
 router.post("/api/chat", requireAuth, chatController.sendMessage);
 router.get("/api/chat/:userId", requireAuth, chatController.getConversation);
