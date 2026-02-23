@@ -71,7 +71,7 @@ const dayNumberFormatter = new Intl.DateTimeFormat("he-IL", {
   timeZone: ISRAEL_TIMEZONE,
 });
 
-const israelDatePartsFormatter = new Intl.DateTimeFormat("en-CA", {
+const israelDatePartsFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -115,7 +115,16 @@ function getWeekDates(weekStart: string) {
 }
 
 function getIsraelTodayIso() {
-  return israelDatePartsFormatter.format(new Date());
+  const parts = israelDatePartsFormatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return formatUtcDateToIso(new Date());
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 export default function ShiftPage() {
