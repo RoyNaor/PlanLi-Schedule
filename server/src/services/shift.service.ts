@@ -16,6 +16,12 @@ interface ShiftWeekRow {
   created_at: Date;
 }
 
+interface WeekSummaryRow {
+  week_start: string;
+  created_at: Date;
+  shifts_count: string;
+}
+
 interface CreateShiftInput {
   weekStart: string;
   shiftDate: string;
@@ -23,6 +29,20 @@ interface CreateShiftInput {
   endTime: string;
   minDoctors: number;
   minNurses: number;
+}
+
+interface UpdateShiftInput {
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  minDoctors: number;
+  minNurses: number;
+}
+
+export interface WeekSummary {
+  weekStart: string;
+  createdAt: string;
+  shiftsCount: number;
 }
 
 export interface Shift {
@@ -34,6 +54,14 @@ export interface Shift {
   minDoctors: number;
   minNurses: number;
   createdAt: string;
+}
+
+function mapWeekSummary(row: WeekSummaryRow): WeekSummary {
+  return {
+    weekStart: row.week_start,
+    createdAt: row.created_at.toISOString(),
+    shiftsCount: Number(row.shifts_count),
+  };
 }
 
 function mapShift(row: ShiftRow): Shift {
@@ -50,6 +78,33 @@ function mapShift(row: ShiftRow): Shift {
 }
 
 export const ShiftService = {
+  async getShiftById(shiftId: number): Promise<Shift | null> {
+    const result = await queryDatabase<ShiftRow>(
+      `SELECT id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at
+       FROM shifts
+       WHERE id = $1`,
+      [shiftId],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return mapShift(result.rows[0] as ShiftRow);
+  },
+
+  async listWeeks(): Promise<WeekSummary[]> {
+    const result = await queryDatabase<WeekSummaryRow>(
+      `SELECT w.week_start, w.created_at, COUNT(s.id) AS shifts_count
+       FROM weeks w
+       LEFT JOIN shifts s ON s.week_start = w.week_start
+       GROUP BY w.week_start, w.created_at
+       ORDER BY w.week_start DESC`,
+    );
+
+    return result.rows.map(mapWeekSummary);
+  },
+
   // Creates a planning week row if it does not already exist.
   async ensureWeek(weekStart: string): Promise<ShiftWeekRow> {
     const result = await queryDatabase<ShiftWeekRow>(
@@ -82,6 +137,55 @@ export const ShiftService = {
     );
 
     return mapShift(result.rows[0] as ShiftRow);
+  },
+
+  async updateShiftById(shiftId: number, input: UpdateShiftInput): Promise<Shift | null> {
+    const result = await queryDatabase<ShiftRow>(
+      `UPDATE shifts
+       SET shift_date = $2,
+           start_time = $3,
+           end_time = $4,
+           min_doctors = $5,
+           min_nurses = $6
+       WHERE id = $1
+       RETURNING id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at`,
+      [
+        shiftId,
+        input.shiftDate,
+        input.startTime,
+        input.endTime,
+        input.minDoctors,
+        input.minNurses,
+      ],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return mapShift(result.rows[0] as ShiftRow);
+  },
+
+  async deleteShiftById(shiftId: number): Promise<boolean> {
+    const result = await queryDatabase<{ id: number }>(
+      `DELETE FROM shifts
+       WHERE id = $1
+       RETURNING id`,
+      [shiftId],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async deleteWeek(weekStart: string): Promise<boolean> {
+    const result = await queryDatabase<{ week_start: string }>(
+      `DELETE FROM weeks
+       WHERE week_start = $1
+       RETURNING week_start`,
+      [weekStart],
+    );
+
+    return (result.rowCount ?? 0) > 0;
   },
 
   // Lists shifts for one scheduling week sorted by date/time.
