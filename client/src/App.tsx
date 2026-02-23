@@ -11,6 +11,7 @@ import "./App.css";
 import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import ShiftPage from "./pages/ShiftPage";
 import { AuthService } from "./services/auth.service";
 import Sidebar from "./components/Sidebar";
 
@@ -101,6 +102,10 @@ function App() {
           <Route
             path="/users"
             element={session ? <UserManagementPage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/shifts"
+            element={session ? <ShiftPage /> : <Navigate to="/login" replace />}
           />
         </Routes>
       </main>
