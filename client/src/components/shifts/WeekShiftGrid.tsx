@@ -1,16 +1,6 @@
-import { Pencil, Trash2 } from "lucide-react";
 import { parseIsoDateToUtc } from "../../utils/date.utils";
-
-export type Shift = {
-  id: number;
-  weekStart: string;
-  shiftDate: string;
-  startTime: string;
-  endTime: string;
-  minDoctors: number;
-  minNurses: number;
-  createdAt: string;
-};
+import type { Shift } from "../types";
+import ShiftCard from "./ShiftCard";
 
 type Props = {
   weekStart: string; // "YYYY-MM-DD"
@@ -49,7 +39,6 @@ export default function WeekShiftGrid({
   onEditShift,
   onDeleteShift,
 }: Props) {
-  // group shifts by date
   const shiftsByDate = new Map<string, Shift[]>();
   for (const s of shifts) {
     const list = shiftsByDate.get(s.shiftDate) ?? [];
@@ -62,7 +51,6 @@ export default function WeekShiftGrid({
 
   return (
     <section className="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-      {/* header days */}
       <div className="grid grid-cols-7 border-b-2 border-slate-800">
         {weekDates.map((isoDate, index) => (
           <div
@@ -89,49 +77,24 @@ export default function WeekShiftGrid({
             return (
               <div
                 key={shiftDate}
-                className="border-l border-slate-300 last:border-l-0 p-3 flex flex-col gap-3"
+                className="border-l border-slate-300 last:border-l-0 p-3 flex flex-col gap-3 bg-slate-50/50"
               >
                 <button
                   type="button"
                   onClick={() => onAddShift(shiftDate)}
-                  className="w-full border-2 border-dashed border-slate-300 rounded-xl py-2 text-slate-600 hover:border-emerald-500 hover:text-emerald-700 transition-colors"
+                  className="w-full border-2 border-dashed border-slate-300 rounded-xl py-2 text-slate-600 hover:border-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
                 >
                   + הוספה
                 </button>
 
                 <div className="space-y-2">
                   {dayShifts.map((shift) => (
-                    <article
+                    <ShiftCard
                       key={shift.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs space-y-1"
-                    >
-                      <p className="font-semibold text-slate-800">
-                        {shift.startTime} - {shift.endTime}
-                      </p>
-                      <p className="text-slate-600">
-                        רופאים: {shift.minDoctors}
-                      </p>
-                      <p className="text-slate-600">אחיות: {shift.minNurses}</p>
-
-                      <div className="flex items-center justify-end gap-1 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => onEditShift(shift)}
-                          className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-700"
-                          title="עריכת משמרת"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteShift(shift.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-100 text-red-700"
-                          title="מחיקת משמרת"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </article>
+                      shift={shift}
+                      onEdit={onEditShift}
+                      onDelete={onDeleteShift}
+                    />
                   ))}
                 </div>
               </div>
