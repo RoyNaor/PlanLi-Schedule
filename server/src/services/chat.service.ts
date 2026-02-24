@@ -1,12 +1,18 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { queryDatabase } from "./database.service.js";
+import {
+  formatIsraelNowIso,
+  formatTranscript,
+  getWeekStartSundayInIsrael,
+  Sender,
+  toIsraelDateParts,
+  TranscriptMessage,
+} from "../utils/chat.utils.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-type Sender = "staff" | "assistant";
 
 interface ConversationRow {
   id: string;
@@ -21,11 +27,6 @@ interface MessageRow {
   created_at: Date;
 }
 
-interface TranscriptMessage {
-  sender: Sender;
-  content: string;
-}
-
 interface SendMessageInput {
   userId: string;
   message: string;
@@ -38,8 +39,6 @@ interface SendMessageResult {
 
 const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
 const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
-const STORABLE_INTENTS = new Set<z.infer<typeof intentEnum>>(["constraint", "schedule_query"]);
-
 const intentResponseSchema = z.object({
   intent: intentEnum,
   confidence: z.number().min(0).max(1),
@@ -56,129 +55,52 @@ const intentResponseSchema = z.object({
 
 type IntentResponse = z.infer<typeof intentResponseSchema>;
 
-const intentSystemPrompt = `You are an intent detection assistant for a medical scheduling chatbot response in Hebrew.
+const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) עבור צ'אטבוט תזמון רפואי. תמיד תחזיר תשובה בעברית בלבד.
 
-Return STRICT JSON only. No markdown, no prose outside JSON, and no extra keys.
+החזר STRICT JSON בלבד. בלי markdown, בלי טקסט מחוץ ל-JSON, ובלי שדות נוספים.
 
-Schema requirements:
-- intent: one of "constraint", "schedule_query", "general", "out_of_scope"
-- confidence: number in range [0, 1]
-- assistant_reply: short natural-language response in the user's language!! this is the most important!!!
-- constraints: array of constraint objects; return [] when no constraint should be stored
-- Add emojis to your assistant_reply to make it friendly and creative.
-- Always end naturally and ask if the user needs anything else.
+דרישות סכימה:
+- intent: אחד מתוך "constraint", "schedule_query", "general", "out_of_scope"
+- confidence: מספר בטווח [0, 1]
+- assistant_reply: תשובה קצרה וטבעית בעברית בלבד (לא אנגלית).
+- constraints: מערך של אובייקטי אילוצים; החזר [] כאשר אין מה לשמור.
+- אפשר להוסיף אימוג'ים ב-assistant_reply כדי לשמור על טון ידידותי.
+- סיים בצורה טבעית ושאל אם צריך עוד משהו.
 
-Intent rules:
+כללי זיהוי:
 1) constraint
-   - User states they cannot/should not be available at a time window.
-   - Extract each unavailable time window as a separate object in constraints.
-   - MUST split multiple days and/or multiple time windows into multiple constraint objects.
-   - Extract start_time and end_time as ISO-8601 strings with timezone offset.
-   - Extract type as "HARD" or "SOFT". If unclear, default to "HARD".
-   Classification rules for type:
-    - "לא יכול", "אסור", "יש לי", "חייב", medical leave → HARD
+   - המשתמש מציין שאינו יכול/לא רוצה להיות זמין בטווח זמן מסוים.
+   - חלץ כל חלון אי-זמינות כאובייקט נפרד בתוך constraints.
+   - חובה לפצל כמה ימים ו/או כמה חלונות זמן למספר אובייקטים נפרדים.
+   - חלץ start_time ו-end_time כמחרוזות ISO-8601 עם אזור זמן.
+   - חלץ type כ-"HARD" או "SOFT". אם לא ברור, ברירת מחדל "HARD".
+   כללי סיווג לסוג:
+    - "לא יכול", "אסור", "יש לי", "חייב", "חופשת מחלה" → HARD
     - "מעדיף", "עדיף", "אם אפשר", "רוצה להימנע" → SOFT
-    If strong inability is expressed → HARD.
-    If preference language is used → SOFT.
-   - reason must be a short, specific reason phrase for the same constraint window (for example: "doctor appointment", "family event", "prefers to avoid night shifts").
-   - Never copy the full user message into reason.
-   - If time is ambiguous or cannot be resolved confidently, ask a follow-up question in assistant_reply and return constraints as [].
+   - reason חייב להיות נימוק קצר וספציפי לאותו חלון זמן.
+   - אין להעתיק את כל הודעת המשתמש לשדה reason.
+   - אם הזמן עמום או לא ניתן לפענוח ודאי, בקש שאלה מבהירה ב-assistant_reply והחזר constraints: [].
 
 2) schedule_query
-   - User asks to check, view, or inspect schedule/calendar.
-   - assistant_reply should indicate you will check the schedule.
+   - המשתמש מבקש לבדוק/לראות את לוח הזמנים.
+   - assistant_reply צריך לציין שתבדוק את הסידור.
 
 3) general
-   - Keep behavior concise and friendly, but still related to medical scheduling.
+   - השב בקצרה ובידידותיות בהקשר תזמון רפואי.
 
 4) out_of_scope
-   - Any request unrelated to medical scheduling and availability.
-   - Do NOT answer the question itself.
-   - Politely explain you can only help with scheduling/availability.
-   - constraints must be [].
+   - כל בקשה שלא קשורה לתזמון רפואי וזמינות.
+   - אל תענה על הבקשה עצמה.
+   - הסבר בנימוס שאתה יכול לעזור רק בתזמון/זמינות.
+   - constraints חייב להיות [].
 
-JSON examples:
-{"intent":"constraint","confidence":0.92,"assistant_reply":"Got it ✅ I marked you unavailable Tuesday evening. Need anything else?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD","reason":"doctor appointment"}]}
-{"intent":"constraint","confidence":0.84,"assistant_reply":"Thanks 🙌 I blocked both requested windows. Need anything else?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"medical leave"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"prefers family time"}]}
-{"intent":"constraint","confidence":0.35,"assistant_reply":"I can add that, but what exact hours should I block on Tuesday? ⏰ Need anything else?","constraints":[]}
-{"intent":"schedule_query","confidence":0.88,"assistant_reply":"I can help check your schedule 📅 Would you like this week or next week?","constraints":[]}
-{"intent":"general","confidence":0.75,"assistant_reply":"Sure 😊 I can help with your medical schedule. What would you like to set?","constraints":[]}
-{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"I’m here for scheduling only 🩺📆 Please ask me about availability or shifts. Anything else I can schedule for you?","constraints":[]}`;
-
-const ISRAEL_TIME_ZONE = "Asia/Jerusalem";
-
-// Extracts Israel-local calendar parts from a Date for deterministic date math.
-function toIsraelDateParts(input: Date): { year: number; month: number; day: number; weekday: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: ISRAEL_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-  }).formatToParts(input);
-
-  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
-  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
-  const day = Number(parts.find((part) => part.type === "day")?.value ?? "0");
-  const weekdayShort = parts.find((part) => part.type === "weekday")?.value;
-  const weekdayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-
-  return {
-    year,
-    month,
-    day,
-    weekday: weekdayMap[weekdayShort ?? "Sun"] ?? 0,
-  };
-}
-
-// Formats the current Israel-local date-time as ISO including UTC offset.
-function formatIsraelNowIso(input: Date): string {
-  const datePart = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: ISRAEL_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(input);
-
-  const timePart = new Intl.DateTimeFormat("en-GB", {
-    timeZone: ISRAEL_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).format(input);
-
-  const timeZoneName = new Intl.DateTimeFormat("en-US", {
-    timeZone: ISRAEL_TIME_ZONE,
-    timeZoneName: "shortOffset",
-  })
-    .formatToParts(input)
-    .find((part) => part.type === "timeZoneName")
-    ?.value?.replace("GMT", "")
-    ?.replace(/^([+-]\d{1,2})$/, "$1:00");
-
-  return `${datePart}T${timePart}${timeZoneName ?? "+02:00"}`;
-}
-
-// Calculates the local week-start date (Sunday) in Israel timezone.
-function getWeekStartSundayInIsrael(dateInput: Date): string {
-  const dateParts = toIsraelDateParts(dateInput);
-  const utcNoonForIsraelDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 12, 0, 0));
-  utcNoonForIsraelDate.setUTCDate(utcNoonForIsraelDate.getUTCDate() - dateParts.weekday);
-
-  const sundayParts = toIsraelDateParts(utcNoonForIsraelDate);
-  const month = String(sundayParts.month).padStart(2, "0");
-  const day = String(sundayParts.day).padStart(2, "0");
-  return `${sundayParts.year}-${month}-${day}`;
-}
+דוגמאות JSON:
+{"intent":"constraint","confidence":0.92,"assistant_reply":"מעולה ✅ סימנתי שאינך זמין ביום שלישי בערב. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD","reason":"תור לרופא"}]}
+{"intent":"constraint","confidence":0.84,"assistant_reply":"תודה 🙌 חסמתי את שני חלונות הזמן שביקשת. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"חופשת מחלה"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"מעדיף זמן משפחה"}]}
+{"intent":"constraint","confidence":0.35,"assistant_reply":"אשמח להוסיף, אבל מה השעות המדויקות לחסימה ביום שלישי? ⏰ צריך עוד משהו?","constraints":[]}
+{"intent":"schedule_query","confidence":0.88,"assistant_reply":"בשמחה 📅 רוצה שאבדוק את השבוע הזה או השבוע הבא?","constraints":[]}
+{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור בתזמון רפואי. מה תרצה לקבוע?","constraints":[]}
+{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"אני יכול לעזור רק בנושאי תזמון וזמינות 🩺📆 אפשר לרשום אילוץ או לבדוק משמרות. צריך עוד משהו?","constraints":[]}`;
 
 export const ChatService = {
   // Persists a user message, asks the model for intent, stores constraints, and saves reply.
@@ -197,13 +119,15 @@ export const ChatService = {
     ];
 
     const intentResponse = await this.generateAssistantResponse(conversationWithIncomingMessage);
-    const shouldPersistMessages = STORABLE_INTENTS.has(intentResponse.intent);
+    const shouldPersistMessages =
+      intentResponse.intent === "constraint" && intentResponse.constraints.length > 0;
 
     if (shouldPersistMessages) {
       await this.createMessage({
         conversationId,
         sender: "staff",
         content: message,
+        intent: intentResponse.intent,
       });
     }
 
@@ -225,6 +149,7 @@ export const ChatService = {
         conversationId,
         sender: "assistant",
         content: intentResponse.assistant_reply,
+        intent: intentResponse.intent,
       });
     }
 
@@ -295,10 +220,11 @@ export const ChatService = {
     conversationId: string;
     sender: Sender;
     content: string;
+    intent: z.infer<typeof intentEnum>;
   }) {
     await queryDatabase(
-      "INSERT INTO messages (conversation_id, sender, content) VALUES ($1, $2, $3)",
-      [input.conversationId, input.sender, input.content],
+      "INSERT INTO messages (conversation_id, sender, content, intent) VALUES ($1, $2, $3, $4)",
+      [input.conversationId, input.sender, input.content, input.intent],
     );
   },
 
@@ -315,19 +241,9 @@ export const ChatService = {
     return result.rows;
   },
 
-  // Converts chat history into a plain transcript consumed by the model prompt.
-  formatTranscript(messages: TranscriptMessage[]): string {
-    return messages
-      .map((message) => {
-        const role = message.sender === "staff" ? "User" : "Assistant";
-        return `${role}: ${message.content}`;
-      })
-      .join("\n");
-  },
-
   // Calls OpenAI with strict JSON schema output to classify intent and extract constraints.
   async generateAssistantResponse(messages: TranscriptMessage[]): Promise<IntentResponse> {
-    const transcript = this.formatTranscript(messages);
+    const transcript = formatTranscript(messages);
     const now = new Date();
     const israelNowIso = formatIsraelNowIso(now);
     const israelNowParts = toIsraelDateParts(now);
@@ -403,7 +319,7 @@ Date resolution rules:
         intent: "general",
         confidence: 0,
         assistant_reply:
-          "I can help with medical scheduling and availability 🩺📅 Please share your preferred shift or blocked time. Need anything else?",
+          "אני יכול לעזור בתזמון רפואי וזמינות 🩺📅 אפשר לכתוב משמרת רצויה או זמן לחסימה. צריך עוד משהו?",
         constraints: [],
       };
     }
