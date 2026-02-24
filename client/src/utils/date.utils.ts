@@ -2,6 +2,23 @@ function isIsoDate(iso: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(iso);
 }
 
+const israelIsoDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Jerusalem",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function normalizeApiDateToIso(value: string | null | undefined) {
+  if (!value) return "";
+  if (isIsoDate(value)) return value;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  return israelIsoDateFormatter.format(parsed);
+}
+
 export function parseIsoDateToUtc(isoDate: string) {
   // רק אם זה YYYY-MM-DD
   if (!isIsoDate(isoDate)) return new Date(NaN);
