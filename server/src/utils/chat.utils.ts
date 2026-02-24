@@ -89,3 +89,29 @@ export function formatTranscript(messages: TranscriptMessage[]): string {
     })
     .join("\n");
 }
+
+// Detects short gratitude/closing messages so the bot can end politely without re-processing constraints.
+export function isConversationClosingMessage(input: string): boolean {
+  const normalized = input
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?,;:"'`~*_()\-]/g, "")
+    .replace(/\s+/g, " ");
+
+  if (!normalized) {
+    return false;
+  }
+
+  const gratitudePatterns = [
+    "thank you",
+    "thanks",
+    "thank u",
+    "תודה",
+    "תודה רבה",
+    "לא תודה",
+    "סבבה תודה",
+    "מעולה תודה",
+  ];
+
+  return gratitudePatterns.some((pattern) => normalized === pattern || normalized.startsWith(`${pattern} `));
+}
