@@ -1,51 +1,29 @@
-interface ChatHeaderProps {
-  userId: string;
-  displayName?: string;
-  onLoadConversation: () => Promise<void>;
-  loading: boolean;
-}
-
-// Renders chat identity context and a control to load a specific user's conversation.
-export function ChatHeader({
-  userId,
-  displayName,
-  onLoadConversation,
-  loading,
-}: ChatHeaderProps) {
+export function ChatHeader() {
   return (
-    <header className="bg-white border border-emerald-100 rounded-2xl px-4 py-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
-      <div className="min-w-0">
-        <p className="text-xs text-emerald-700 tracking-wide uppercase">
-          PlanLi AI
-        </p>
-        <h1 className="text-lg font-semibold text-gray-800">Scheduling Chat</h1>
-        {displayName ? (
-          <p className="text-sm text-gray-500">Signed in as {displayName}</p>
-        ) : null}
+    <header
+      dir="rtl"
+      className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-l from-emerald-50 via-white to-emerald-100/60 px-6 py-6 shadow-sm"
+    >
+      {/* Glow effect */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_45%)]" />
+
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Right side – Identity */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md">
+            🤖
+          </div>
+
+          <div>
+            <h1 className="text-xl font-semibold text-emerald-900">
+              עוזר שיבוצים אישי
+            </h1>
+            <p className="text-sm text-emerald-700">
+              מתזמנים חכם. עובדים רגוע.
+            </p>
+          </div>
+        </div>
       </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void onLoadConversation();
-        }}
-        className="flex w-full sm:w-auto items-stretch sm:items-center flex-col sm:flex-row gap-2 sm:gap-3"
-      >
-        <input
-          value={userId}
-          readOnly
-          aria-label="User ID"
-          className="w-full sm:w-80 min-w-0 px-3 py-2 text-sm border border-emerald-200 rounded-lg bg-emerald-50/40 text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-
-        <button
-          type="submit"
-          disabled={loading || !userId.trim()}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition disabled:opacity-50 sm:self-auto"
-        >
-          {loading ? "Loading..." : "Load"}
-        </button>
-      </form>
     </header>
   );
 }
