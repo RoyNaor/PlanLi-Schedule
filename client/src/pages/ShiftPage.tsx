@@ -12,6 +12,7 @@ import {
   getWeekDates,
   parseIsoDateToUtc,
   addDaysToIsoDate,
+  normalizeApiDateToIso,
 } from "../utils/date.utils";
 
 const API_BASE = "http://localhost:3000/api";
@@ -57,7 +58,7 @@ export default function ShiftPage() {
 
       const loadedWeeks = (res.data.weeks ?? []).map((w) => ({
         ...w,
-        weekStart: (w.weekStart ?? "").slice(0, 10),
+        weekStart: normalizeApiDateToIso(w.weekStart),
       }));
 
       setWeeks(loadedWeeks);
@@ -92,7 +93,13 @@ export default function ShiftPage() {
           { headers: authHeaders },
         );
 
-        setShifts(res.data.shifts ?? []);
+        setShifts(
+          (res.data.shifts ?? []).map((shift) => ({
+            ...shift,
+            weekStart: normalizeApiDateToIso(shift.weekStart),
+            shiftDate: normalizeApiDateToIso(shift.shiftDate),
+          })),
+        );
       } catch (error: any) {
         console.error("Error loading shifts:", error);
         alert(
