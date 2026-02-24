@@ -100,7 +100,7 @@ const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) ע�
 {"intent":"constraint","confidence":0.84,"assistant_reply":"תודה 🙌 חסמתי את שני חלונות הזמן שביקשת. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"חופשת מחלה"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"מעדיף זמן משפחה"}]}
 {"intent":"constraint","confidence":0.35,"assistant_reply":"אשמח להוסיף, אבל מה השעות המדויקות לחסימה ביום שלישי? ⏰ צריך עוד משהו?","constraints":[]}
 {"intent":"schedule_query","confidence":0.88,"assistant_reply":"בשמחה 📅 רוצה שאבדוק את השבוע הזה או השבוע הבא?","constraints":[]}
-{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור בתזמון רפואי. מה תרצה לקבוע?","constraints":[]}
+{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור עם המשמרות שלך. מה תרצה לקבוע?","constraints":[]}
 {"intent":"out_of_scope","confidence":0.99,"assistant_reply":"אני יכול לעזור רק בנושאי תזמון וזמינות 🩺📆 אפשר לרשום אילוץ או לבדוק משמרות. צריך עוד משהו?","constraints":[]}`;
 
 export const ChatService = {
