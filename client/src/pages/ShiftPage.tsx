@@ -8,6 +8,7 @@ import WeekPickerModal from "../components/shifts/WeekPickerModal";
 import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
 
 import type { WeekSummary, Shift } from "../components/types";
+import ShiftFormModal from "../components/shifts/ShiftFormModal";
 import {
   getWeekDates,
   parseIsoDateToUtc,
@@ -37,6 +38,11 @@ export default function ShiftPage() {
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
+
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [shiftModalMode, setShiftModalMode] = useState<"create" | "edit">("create");
+  const [draftShiftDate, setDraftShiftDate] = useState("");
+  const [shiftToEdit, setShiftToEdit] = useState<Shift | null>(null);
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -193,12 +199,65 @@ export default function ShiftPage() {
   );
 
   const handleAddShift = (shiftDate: string) => {
-    alert(`נלחץ הוספה ליום: ${shiftDate}\n(בשלב הבא נחבר מודאל יצירה)`);
+    setShiftModalMode("create");
+    setDraftShiftDate(shiftDate);
+    setShiftToEdit(null);
+    setIsShiftModalOpen(true);
   };
 
   const handleEditShift = (shift: Shift) => {
-    alert(`עריכה למשמרת #${shift.id}\n(בשלב הבא נחבר מודאל עריכה)`);
+    setShiftModalMode("edit");
+    setDraftShiftDate(shift.shiftDate);
+    setShiftToEdit(shift);
+    setIsShiftModalOpen(true);
   };
+
+  const handleSubmitShift = useCallback(
+    async (values: {
+      shiftDate: string;
+      startTime: string;
+      endTime: string;
+      minDoctors: number;
+      minNurses: number;
+    }) => {
+      if (!selectedWeek) return;
+
+      const payload = {
+        week_start: selectedWeek,
+        shift_date: values.shiftDate,
+        start_time: values.startTime,
+        end_time: values.endTime,
+        min_doctors: values.minDoctors,
+        min_nurses: values.minNurses,
+      };
+
+      try {
+        if (shiftModalMode === "create") {
+          await axios.post(`${API_BASE}/shifts`, payload, { headers: authHeaders });
+        } else if (shiftToEdit) {
+          await axios.put(
+            `${API_BASE}/shifts/${shiftToEdit.id}`,
+            {
+              shift_date: payload.shift_date,
+              start_time: payload.start_time,
+              end_time: payload.end_time,
+              min_doctors: payload.min_doctors,
+              min_nurses: payload.min_nurses,
+            },
+            { headers: authHeaders },
+          );
+        }
+
+        await fetchShifts(selectedWeek);
+        await fetchWeeks();
+      } catch (error: any) {
+        console.error("Error saving shift:", error);
+        alert(`שגיאה בשמירת משמרת: ${error.response?.data?.error ?? "Unknown error"}`);
+        throw error;
+      }
+    },
+    [authHeaders, fetchShifts, fetchWeeks, selectedWeek, shiftModalMode, shiftToEdit],
+  );
 
   const handleDeleteShift = async (shiftId: number) => {
     const ok = window.confirm("למחוק את המשמרת הזו?");
@@ -246,6 +305,17 @@ export default function ShiftPage() {
           selectedWeek={selectedWeek}
           onClose={() => setShowWeekModal(false)}
           onSelectWeekStart={handleSelectWeekStart}
+        />
+
+
+        <ShiftFormModal
+          isOpen={isShiftModalOpen}
+          mode={shiftModalMode}
+          weekStart={selectedWeek}
+          initialShiftDate={draftShiftDate}
+          shiftToEdit={shiftToEdit}
+          onClose={() => setIsShiftModalOpen(false)}
+          onSubmit={handleSubmitShift}
         />
 
         <WeekShiftGrid
