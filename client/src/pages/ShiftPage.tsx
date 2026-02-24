@@ -8,7 +8,11 @@ import WeekPickerModal from "../components/shifts/WeekPickerModal";
 import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
 
 import type { WeekSummary, Shift } from "../components/types";
-import { getWeekDates, parseIsoDateToUtc } from "../utils/date.utils";
+import {
+  getWeekDates,
+  parseIsoDateToUtc,
+  addDaysToIsoDate,
+} from "../utils/date.utils";
 
 const API_BASE = "http://localhost:3000/api";
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
@@ -124,11 +128,6 @@ export default function ShiftPage() {
     )}`;
   }, [weekDates, loadingWeeks]);
 
-  const selectedWeekIndex = useMemo(
-    () => weeks.findIndex((w) => w.weekStart === selectedWeek),
-    [weeks, selectedWeek],
-  );
-
   const handleSelectWeekStart = useCallback(
     async (weekStart: string) => {
       if (!token) return;
@@ -154,6 +153,36 @@ export default function ShiftPage() {
       }
     },
     [authHeaders, fetchWeeks, token, weeks],
+  );
+
+  const navigateWeekByOffset = useCallback(
+    async (daysOffset: number) => {
+      if (!selectedWeek) return;
+
+      const newWeekStart = addDaysToIsoDate(selectedWeek, daysOffset);
+
+      try {
+        const exists = weeks.some((w) => w.weekStart === newWeekStart);
+
+        if (!exists) {
+          await axios.post(
+            `${API_BASE}/weeks`,
+            { week_start: newWeekStart },
+            { headers: authHeaders },
+          );
+
+          await fetchWeeks();
+        }
+
+        setSelectedWeek(newWeekStart);
+      } catch (error: any) {
+        console.error("Error navigating week:", error);
+        alert(
+          `שגיאה במעבר שבוע: ${error.response?.data?.error ?? "Unknown error"}`,
+        );
+      }
+    },
+    [selectedWeek, weeks, authHeaders, fetchWeeks],
   );
 
   const handleAddShift = (shiftDate: string) => {
@@ -197,18 +226,10 @@ export default function ShiftPage() {
 
         <WeekBar
           selectedWeekRangeLabel={selectedWeekRangeLabel}
-          canGoPrev={selectedWeekIndex > 0}
-          canGoNext={
-            selectedWeekIndex >= 0 && selectedWeekIndex < weeks.length - 1
-          }
-          onPrev={() => {
-            const prev = weeks[selectedWeekIndex - 1];
-            if (prev) setSelectedWeek(prev.weekStart);
-          }}
-          onNext={() => {
-            const next = weeks[selectedWeekIndex + 1];
-            if (next) setSelectedWeek(next.weekStart);
-          }}
+          canGoPrev={!!selectedWeek}
+          canGoNext={!!selectedWeek}
+          onPrev={() => navigateWeekByOffset(-7)}
+          onNext={() => navigateWeekByOffset(7)}
           onOpenPicker={() => setShowWeekModal(true)}
         />
 
