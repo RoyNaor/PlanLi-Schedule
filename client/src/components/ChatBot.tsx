@@ -133,9 +133,14 @@ export function ChatBot() {
   return (
     <main className="chat-shell">
       <ChatHeader
-        userId={userId}
         displayName={sessionUser?.fullName}
-        onLoadConversation={loadConversation}
+        role={sessionUser?.role}
+        weekStart={new Intl.DateTimeFormat("he-IL", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date())}
+        onRefresh={loadConversation}
         loading={loading}
       />
 
