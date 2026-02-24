@@ -22,10 +22,12 @@ body {
 
 .app-layout {
   min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   grid-template-areas: "sidebar content";
   position: relative;
+  overflow: hidden;
 }
 
 .app-layout.is-login {
@@ -36,9 +38,11 @@ body {
 .app-content {
   grid-area: content;
   min-height: 100vh;
+  height: 100vh;
   display: grid;
   place-items: center;
   padding: clamp(0.75rem, 3vw, 2rem);
+  overflow-y: auto;
 }
 
 /* Sidebar - עיצוב מודרני לבן/ירוק */
@@ -52,6 +56,8 @@ body {
   gap: 0.9rem;
   box-shadow: -10px 0 26px rgba(17, 24, 39, 0.06);
   grid-area: sidebar;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar-top {
