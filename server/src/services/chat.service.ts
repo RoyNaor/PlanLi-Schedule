@@ -5,6 +5,7 @@ import {
   formatIsraelNowIso,
   formatTranscript,
   getWeekStartSundayInIsrael,
+  isConversationClosingMessage,
   Sender,
   toIsraelDateParts,
   TranscriptMessage,
@@ -107,6 +108,14 @@ export const ChatService = {
   async sendMessage({ userId, message }: SendMessageInput): Promise<SendMessageResult> {
     await this.ensureUserExists(userId);
     const conversationId = await this.getOrCreateConversation(userId);
+
+    if (isConversationClosingMessage(message)) {
+      return {
+        conversationId,
+        assistantText: "בכיף 😊 שמחתי לעזור. אם תרצה לעדכן זמינות נוספת, אני כאן.",
+      };
+    }
+
     await this.incrementAndGetUserMessageCount(conversationId);
 
     const persistedConversationMessages = await this.getMessagesByConversationId(conversationId);
