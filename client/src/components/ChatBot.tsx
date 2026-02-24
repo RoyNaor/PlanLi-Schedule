@@ -27,7 +27,9 @@ const STARTER_MESSAGE: ChatMessage = {
 // Coordinates chat state, API calls, and rendering of the conversation UI.
 export function ChatBot() {
   const storedSession = AuthService.getSession();
-  const [sessionUser] = useState<SessionUser | null>(storedSession?.user ?? null);
+  const [sessionUser] = useState<SessionUser | null>(
+    storedSession?.user ?? null,
+  );
   const [userId] = useState(storedSession?.user.id ?? "");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -132,17 +134,7 @@ export function ChatBot() {
 
   return (
     <main className="chat-shell">
-      <ChatHeader
-        displayName={sessionUser?.fullName}
-        role={sessionUser?.role}
-        weekStart={new Intl.DateTimeFormat("he-IL", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        }).format(new Date())}
-        onRefresh={loadConversation}
-        loading={loading}
-      />
+      <ChatHeader />
 
       <section className="chat-card">
         <div className="chat-log">
