@@ -1,21 +1,25 @@
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 
 type Props = {
   selectedWeekRangeLabel: string;
   canGoPrev: boolean;
   canGoNext: boolean;
+  canDuplicate: boolean;
   onPrev: () => void;
   onNext: () => void;
   onOpenPicker: () => void;
+  onOpenDuplicate: () => void;
 };
 
 export default function WeekBar({
   selectedWeekRangeLabel,
   canGoPrev,
   canGoNext,
+  canDuplicate,
   onPrev,
   onNext,
   onOpenPicker,
+  onOpenDuplicate,
 }: Props) {
   return (
     <section className="bg-white border-2 border-slate-800 rounded-2xl p-4 md:p-6 shadow-sm">
@@ -47,6 +51,16 @@ export default function WeekBar({
           aria-label="שבוע הבא"
         >
           <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenDuplicate}
+          disabled={!canDuplicate}
+          className="h-11 px-4 rounded-xl border border-slate-300 text-slate-700 inline-flex items-center gap-2 hover:bg-slate-50 disabled:opacity-40"
+        >
+          <Copy className="w-4 h-4" />
+          שכפול שבוע
         </button>
       </div>
     </section>

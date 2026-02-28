@@ -6,6 +6,7 @@ import { AuthService } from "../services/auth.service";
 import WeekBar from "../components/shifts/WeekBar";
 import WeekPickerModal from "../components/shifts/WeekPickerModal";
 import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
+import DuplicateWeekModal from "../components/shifts/DuplicateWeekModal";
 
 import type { WeekSummary, Shift } from "../components/types";
 import ShiftFormModal from "../components/shifts/ShiftFormModal";
@@ -14,6 +15,9 @@ import {
   parseIsoDateToUtc,
   addDaysToIsoDate,
   normalizeApiDateToIso,
+  normalizeApiTimeToHourMinute,
+  getJerusalemTodayIsoDate,
+  startOfWeekSundayIso,
 } from "../utils/date.utils";
 
 const API_BASE = "http://localhost:3000/api";
@@ -31,10 +35,13 @@ export default function ShiftPage() {
   const token = session?.jwtToken ?? "";
 
   const [weeks, setWeeks] = useState<WeekSummary[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState("");
+  const [selectedWeek, setSelectedWeek] = useState(() =>
+    startOfWeekSundayIso(getJerusalemTodayIsoDate()),
+  );
   const [loadingWeeks, setLoadingWeeks] = useState(true);
 
   const [showWeekModal, setShowWeekModal] = useState(false);
+  const [showDuplicateWeekModal, setShowDuplicateWeekModal] = useState(false);
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
@@ -71,9 +78,7 @@ export default function ShiftPage() {
 
       setSelectedWeek((current) => {
         if (!current) return loadedWeeks[0]?.weekStart ?? "";
-        return loadedWeeks.some((w) => w.weekStart === current)
-          ? current
-          : (loadedWeeks[0]?.weekStart ?? "");
+        return current;
       });
     } catch (error: any) {
       console.error("Error loading weeks:", error);
@@ -104,6 +109,8 @@ export default function ShiftPage() {
             ...shift,
             weekStart: normalizeApiDateToIso(shift.weekStart),
             shiftDate: normalizeApiDateToIso(shift.shiftDate),
+            startTime: normalizeApiTimeToHourMinute(shift.startTime) || shift.startTime,
+            endTime: normalizeApiTimeToHourMinute(shift.endTime) || shift.endTime,
           })),
         );
       } catch (error: any) {
@@ -120,8 +127,27 @@ export default function ShiftPage() {
   );
 
   useEffect(() => {
-    void fetchWeeks();
-  }, [fetchWeeks]);
+    if (!token) return;
+
+    const initializeCurrentWeek = async () => {
+      const currentWeekStart = startOfWeekSundayIso(getJerusalemTodayIsoDate());
+      setSelectedWeek(currentWeekStart);
+
+      try {
+        await axios.post(
+          `${API_BASE}/weeks`,
+          { week_start: currentWeekStart },
+          { headers: authHeaders },
+        );
+      } catch (error) {
+        console.error("Error ensuring current week:", error);
+      }
+
+      await fetchWeeks();
+    };
+
+    void initializeCurrentWeek();
+  }, [authHeaders, fetchWeeks, token]);
 
   useEffect(() => {
     if (selectedWeek) void fetchShifts(selectedWeek);
@@ -140,6 +166,11 @@ export default function ShiftPage() {
       parseIsoDateToUtc(weekDates[6]),
     )}`;
   }, [weekDates, loadingWeeks]);
+
+  const defaultDuplicateTargetWeek = useMemo(
+    () => (selectedWeek ? addDaysToIsoDate(selectedWeek, 7) : ""),
+    [selectedWeek],
+  );
 
   const handleSelectWeekStart = useCallback(
     async (weekStart: string) => {
@@ -221,12 +252,19 @@ export default function ShiftPage() {
       minNurses: number;
     }) => {
       if (!selectedWeek) return;
+      const normalizedStartTime = normalizeApiTimeToHourMinute(values.startTime);
+      const normalizedEndTime = normalizeApiTimeToHourMinute(values.endTime);
+
+      if (!normalizedStartTime || !normalizedEndTime) {
+        alert("שעת התחלה ושעת סיום חייבות להיות בפורמט HH:mm.");
+        throw new Error("Invalid shift time format");
+      }
 
       const payload = {
         week_start: selectedWeek,
         shift_date: values.shiftDate,
-        start_time: values.startTime,
-        end_time: values.endTime,
+        start_time: normalizedStartTime,
+        end_time: normalizedEndTime,
         min_doctors: values.minDoctors,
         min_nurses: values.minNurses,
       };
@@ -277,6 +315,39 @@ export default function ShiftPage() {
     }
   };
 
+  const handleDuplicateWeek = useCallback(
+    async (values: { sourceWeekStart: string; targetWeekStart: string }) => {
+      if (!token) return;
+
+      try {
+        const normalizedSourceWeek = startOfWeekSundayIso(values.sourceWeekStart);
+        const normalizedTargetWeek = startOfWeekSundayIso(values.targetWeekStart);
+
+        if (!normalizedSourceWeek || !normalizedTargetWeek) {
+          throw new Error("source and target weeks must be valid ISO dates");
+        }
+
+        await axios.post(
+          `${API_BASE}/weeks/duplicate`,
+          {
+            source_week_start: normalizedSourceWeek,
+            target_week_start: normalizedTargetWeek,
+          },
+          { headers: authHeaders },
+        );
+
+        await fetchWeeks();
+        setSelectedWeek(normalizedTargetWeek);
+        await fetchShifts(normalizedTargetWeek);
+      } catch (error: any) {
+        console.error("Error duplicating week:", error);
+        alert(`שגיאה בשכפול שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
+        throw error;
+      }
+    },
+    [authHeaders, fetchShifts, fetchWeeks, token],
+  );
+
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
 
@@ -294,9 +365,11 @@ export default function ShiftPage() {
           selectedWeekRangeLabel={selectedWeekRangeLabel}
           canGoPrev={!!selectedWeek}
           canGoNext={!!selectedWeek}
+          canDuplicate={weeks.length > 0}
           onPrev={() => navigateWeekByOffset(-7)}
           onNext={() => navigateWeekByOffset(7)}
           onOpenPicker={() => setShowWeekModal(true)}
+          onOpenDuplicate={() => setShowDuplicateWeekModal(true)}
         />
 
         <WeekPickerModal
@@ -305,6 +378,15 @@ export default function ShiftPage() {
           selectedWeek={selectedWeek}
           onClose={() => setShowWeekModal(false)}
           onSelectWeekStart={handleSelectWeekStart}
+        />
+
+        <DuplicateWeekModal
+          isOpen={showDuplicateWeekModal}
+          weeks={weeks}
+          defaultSourceWeek={selectedWeek}
+          defaultTargetWeek={defaultDuplicateTargetWeek}
+          onClose={() => setShowDuplicateWeekModal(false)}
+          onSubmit={handleDuplicateWeek}
         />
 
 

@@ -31,6 +31,7 @@ router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
 
 router.get("/api/weeks", requireAuth, shiftController.listWeeks);
 router.post("/api/weeks", requireAuth, shiftController.createWeek);
+router.post("/api/weeks/duplicate", requireAuth, shiftController.duplicateWeek);
 router.delete("/api/weeks/:weekStart", requireAuth, shiftController.deleteWeek);
 
 router.post("/api/shifts", requireAuth, shiftController.createShift);

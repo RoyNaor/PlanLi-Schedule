@@ -5,6 +5,7 @@ import {
   isDateInsideWeek,
   isIsoDateString,
   isTimeString,
+  normalizeTimeToHourMinute,
 } from "./schedule-date.utils.js";
 
 test("isIsoDateString validates calendar dates", () => {
@@ -15,9 +16,16 @@ test("isIsoDateString validates calendar dates", () => {
 
 test("isTimeString validates 24-hour HH:mm values", () => {
   assert.equal(isTimeString("08:00"), true);
+  assert.equal(isTimeString("08:00:00"), true);
   assert.equal(isTimeString("23:59"), true);
   assert.equal(isTimeString("24:00"), false);
   assert.equal(isTimeString("8:00"), false);
+});
+
+test("normalizeTimeToHourMinute normalizes supported values", () => {
+  assert.equal(normalizeTimeToHourMinute("08:00"), "08:00");
+  assert.equal(normalizeTimeToHourMinute("08:00:59"), "08:00");
+  assert.equal(normalizeTimeToHourMinute("8:00"), null);
 });
 
 test("isDateInsideWeek accepts dates within the week window", () => {
