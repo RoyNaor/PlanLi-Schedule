@@ -1,5 +1,6 @@
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 const hhmmRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const hhmmWithOptionalSecondsRegex = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
 
 // Validates strict ISO calendar date strings (YYYY-MM-DD).
 export function isIsoDateString(value: string): boolean {
@@ -11,9 +12,27 @@ export function isIsoDateString(value: string): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-// Validates 24-hour clock strings (HH:mm) used by shift start and end times.
+// Validates 24-hour clock strings (HH:mm or HH:mm:ss) used by shift times.
 export function isTimeString(value: string): boolean {
-  return hhmmRegex.test(value);
+  return hhmmWithOptionalSecondsRegex.test(value);
+}
+
+// Normalizes accepted time strings to HH:mm for storage and comparison.
+export function normalizeTimeToHourMinute(value: string): string | null {
+  const match = hhmmWithOptionalSecondsRegex.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const hours = match[1];
+  const minutes = match[2];
+  const normalized = `${hours}:${minutes}`;
+
+  if (!hhmmRegex.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
 }
 
 // Ensures the shift_date belongs to the given week_start date [week_start, week_start + 6 days].
