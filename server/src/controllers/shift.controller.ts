@@ -7,6 +7,7 @@ import {
   isDateInsideWeek,
   isIsoDateString,
   isTimeString,
+  normalizeTimeToHourMinute,
 } from "../utils/schedule-date.utils.js";
 
 const createShiftSchema = z.object({
@@ -19,6 +20,10 @@ const createShiftSchema = z.object({
 });
 
 const updateShiftSchema = createShiftSchema.omit({ week_start: true });
+const duplicateWeekSchema = z.object({
+  source_week_start: z.string(),
+  target_week_start: z.string(),
+});
 
 async function requireAdmin(req: Request, res: Response) {
   if (!req.authUser?.uid) {
@@ -44,7 +49,7 @@ function validateShiftPayload(payload: z.infer<typeof createShiftSchema>) {
   }
 
   if (!isTimeString(payload.start_time) || !isTimeString(payload.end_time)) {
-    throw new Error("start_time and end_time must use HH:mm format");
+    throw new Error("start_time and end_time must use HH:mm or HH:mm:ss format");
   }
 
   if (payload.start_time >= payload.end_time) {
@@ -123,6 +128,41 @@ export const shiftController = {
     }
   },
 
+  async duplicateWeek(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const parsed = duplicateWeekSchema.parse(req.body);
+      if (!isIsoDateString(parsed.source_week_start) || !isIsoDateString(parsed.target_week_start)) {
+        return res.status(400).json({
+          error: "source_week_start and target_week_start must be valid ISO dates (YYYY-MM-DD)",
+        });
+      }
+
+      const duplicated = await ShiftService.duplicateWeekShifts({
+        sourceWeekStart: parsed.source_week_start,
+        targetWeekStart: parsed.target_week_start,
+      });
+
+      return res.status(201).json({
+        source_week_start: parsed.source_week_start,
+        target_week_start: parsed.target_week_start,
+        copied_count: duplicated.copiedCount,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid payload", issues: error.issues });
+      }
+
+      const message = error instanceof Error ? error.message : "Failed to duplicate week";
+      console.error("Error duplicating week:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
   // Creates one shift row under the given week_start schedule bucket.
   async createShift(req: Request, res: Response) {
     try {
@@ -132,15 +172,30 @@ export const shiftController = {
       }
 
       const parsed = createShiftSchema.parse(req.body);
-      validateShiftPayload(parsed);
+      const normalizedStartTime = normalizeTimeToHourMinute(parsed.start_time);
+      const normalizedEndTime = normalizeTimeToHourMinute(parsed.end_time);
+
+      if (!normalizedStartTime || !normalizedEndTime) {
+        return res
+          .status(400)
+          .json({ error: "start_time and end_time must use HH:mm or HH:mm:ss format" });
+      }
+
+      const normalizedPayload = {
+        ...parsed,
+        start_time: normalizedStartTime,
+        end_time: normalizedEndTime,
+      };
+
+      validateShiftPayload(normalizedPayload);
 
       const created = await ShiftService.createShift({
-        weekStart: parsed.week_start,
-        shiftDate: parsed.shift_date,
-        startTime: parsed.start_time,
-        endTime: parsed.end_time,
-        minDoctors: parsed.min_doctors,
-        minNurses: parsed.min_nurses,
+        weekStart: normalizedPayload.week_start,
+        shiftDate: normalizedPayload.shift_date,
+        startTime: normalizedPayload.start_time,
+        endTime: normalizedPayload.end_time,
+        minDoctors: normalizedPayload.min_doctors,
+        minNurses: normalizedPayload.min_nurses,
       });
 
       return res.status(201).json({
@@ -206,10 +261,21 @@ export const shiftController = {
       }
 
       if (!isTimeString(parsed.start_time) || !isTimeString(parsed.end_time)) {
-        return res.status(400).json({ error: "start_time and end_time must use HH:mm format" });
+        return res
+          .status(400)
+          .json({ error: "start_time and end_time must use HH:mm or HH:mm:ss format" });
       }
 
-      if (parsed.start_time >= parsed.end_time) {
+      const normalizedStartTime = normalizeTimeToHourMinute(parsed.start_time);
+      const normalizedEndTime = normalizeTimeToHourMinute(parsed.end_time);
+
+      if (!normalizedStartTime || !normalizedEndTime) {
+        return res
+          .status(400)
+          .json({ error: "start_time and end_time must use HH:mm or HH:mm:ss format" });
+      }
+
+      if (normalizedStartTime >= normalizedEndTime) {
         return res.status(400).json({ error: "start_time must be before end_time" });
       }
 
@@ -226,8 +292,8 @@ export const shiftController = {
 
       const updated = await ShiftService.updateShiftById(shiftId, {
         shiftDate: parsed.shift_date,
-        startTime: parsed.start_time,
-        endTime: parsed.end_time,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
         minDoctors: parsed.min_doctors,
         minNurses: parsed.min_nurses,
       });

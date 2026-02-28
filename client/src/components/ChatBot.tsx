@@ -4,7 +4,7 @@ import { ChatHeader } from "./chat/ChatHeader";
 import { ChatInput } from "./chat/ChatInput";
 import { MessageBubble } from "./chat/MessageBubble";
 import type { ChatMessage } from "./types";
-import { AuthService, type SessionUser } from "../services/auth.service";
+import { AuthService } from "../services/auth.service";
 
 interface ConversationResponse {
   conversationId: string;
@@ -27,12 +27,8 @@ const STARTER_MESSAGE: ChatMessage = {
 // Coordinates chat state, API calls, and rendering of the conversation UI.
 export function ChatBot() {
   const storedSession = AuthService.getSession();
-  const [sessionUser] = useState<SessionUser | null>(
-    storedSession?.user ?? null,
-  );
   const [userId] = useState(storedSession?.user.id ?? "");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -54,7 +50,6 @@ export function ChatBot() {
     if (!userId.trim()) return;
 
     try {
-      setLoading(true);
       setError("");
       const response = await axios.get<ConversationResponse>(
         `${API_BASE}/chat/${encodeURIComponent(userId.trim())}`,
@@ -73,8 +68,6 @@ export function ChatBot() {
         ? (requestError.response?.data?.error ?? requestError.message)
         : "Unable to load conversation";
       setError(message);
-    } finally {
-      setLoading(false);
     }
   };
 

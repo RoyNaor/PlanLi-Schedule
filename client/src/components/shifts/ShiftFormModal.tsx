@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeApiTimeToHourMinute } from "../../utils/date.utils";
 import type { Shift } from "../types";
 
 type ShiftFormValues = {
@@ -33,8 +34,8 @@ function toFormValues(shiftDate: string, shiftToEdit: Shift | null): ShiftFormVa
 
   return {
     shiftDate: shiftToEdit.shiftDate,
-    startTime: shiftToEdit.startTime,
-    endTime: shiftToEdit.endTime,
+    startTime: normalizeApiTimeToHourMinute(shiftToEdit.startTime) || "08:00",
+    endTime: normalizeApiTimeToHourMinute(shiftToEdit.endTime) || "16:00",
     minDoctors: shiftToEdit.minDoctors,
     minNurses: shiftToEdit.minNurses,
   };
@@ -93,7 +94,7 @@ export default function ShiftFormModal({
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">week_start</span>
+              <span className="text-sm text-slate-600">תחילת שבוע</span>
               <input
                 value={weekStart}
                 readOnly
@@ -102,7 +103,7 @@ export default function ShiftFormModal({
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">shift_date</span>
+              <span className="text-sm text-slate-600">תאריך משמרת</span>
               <input
                 type="date"
                 value={values.shiftDate}
@@ -115,7 +116,7 @@ export default function ShiftFormModal({
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">start_time</span>
+              <span className="text-sm text-slate-600">שעת התחלה</span>
               <input
                 type="time"
                 value={values.startTime}
@@ -128,7 +129,7 @@ export default function ShiftFormModal({
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">end_time</span>
+              <span className="text-sm text-slate-600">שעת סיום</span>
               <input
                 type="time"
                 value={values.endTime}
@@ -141,7 +142,7 @@ export default function ShiftFormModal({
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">min_doctors</span>
+              <span className="text-sm text-slate-600">מינימום רופאים</span>
               <input
                 type="number"
                 min={0}
@@ -158,7 +159,7 @@ export default function ShiftFormModal({
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm text-slate-600">min_nurses</span>
+              <span className="text-sm text-slate-600">מינימום אחיות</span>
               <input
                 type="number"
                 min={0}
