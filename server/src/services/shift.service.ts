@@ -39,6 +39,11 @@ interface UpdateShiftInput {
   minNurses: number;
 }
 
+interface DuplicateWeekShiftsInput {
+  sourceWeekStart: string;
+  targetWeekStart: string;
+}
+
 export interface WeekSummary {
   weekStart: string;
   createdAt: string;
@@ -80,7 +85,8 @@ function mapShift(row: ShiftRow): Shift {
 export const ShiftService = {
   async getShiftById(shiftId: number): Promise<Shift | null> {
     const result = await queryDatabase<ShiftRow>(
-      `SELECT id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at
+      `SELECT id, week_start::text AS week_start, shift_date::text AS shift_date,
+              start_time, end_time, min_doctors, min_nurses, created_at
        FROM shifts
        WHERE id = $1`,
       [shiftId],
@@ -95,7 +101,7 @@ export const ShiftService = {
 
   async listWeeks(): Promise<WeekSummary[]> {
     const result = await queryDatabase<WeekSummaryRow>(
-      `SELECT w.week_start, w.created_at, COUNT(s.id) AS shifts_count
+      `SELECT w.week_start::text AS week_start, w.created_at, COUNT(s.id) AS shifts_count
        FROM weeks w
        LEFT JOIN shifts s ON s.week_start = w.week_start
        GROUP BY w.week_start, w.created_at
@@ -111,7 +117,7 @@ export const ShiftService = {
       `INSERT INTO weeks (week_start)
        VALUES ($1)
        ON CONFLICT (week_start) DO UPDATE SET week_start = EXCLUDED.week_start
-       RETURNING week_start, created_at`,
+       RETURNING week_start::text AS week_start, created_at`,
       [weekStart],
     );
 
@@ -125,7 +131,8 @@ export const ShiftService = {
     const result = await queryDatabase<ShiftRow>(
       `INSERT INTO shifts (week_start, shift_date, start_time, end_time, min_doctors, min_nurses)
        VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at`,
+       RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
+                 start_time, end_time, min_doctors, min_nurses, created_at`,
       [
         input.weekStart,
         input.shiftDate,
@@ -148,7 +155,8 @@ export const ShiftService = {
            min_doctors = $5,
            min_nurses = $6
        WHERE id = $1
-       RETURNING id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at`,
+       RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
+                 start_time, end_time, min_doctors, min_nurses, created_at`,
       [
         shiftId,
         input.shiftDate,
@@ -181,7 +189,7 @@ export const ShiftService = {
     const result = await queryDatabase<{ week_start: string }>(
       `DELETE FROM weeks
        WHERE week_start = $1
-       RETURNING week_start`,
+       RETURNING week_start::text AS week_start`,
       [weekStart],
     );
 
@@ -191,7 +199,8 @@ export const ShiftService = {
   // Lists shifts for one scheduling week sorted by date/time.
   async listShiftsByWeek(weekStart: string): Promise<Shift[]> {
     const result = await queryDatabase<ShiftRow>(
-      `SELECT id, week_start, shift_date, start_time, end_time, min_doctors, min_nurses, created_at
+      `SELECT id, week_start::text AS week_start, shift_date::text AS shift_date,
+              start_time, end_time, min_doctors, min_nurses, created_at
        FROM shifts
        WHERE week_start = $1
        ORDER BY shift_date ASC, start_time ASC`,
@@ -199,5 +208,47 @@ export const ShiftService = {
     );
 
     return result.rows.map(mapShift);
+  },
+
+  async duplicateWeekShifts(input: DuplicateWeekShiftsInput): Promise<{ copiedCount: number }> {
+    if (input.sourceWeekStart === input.targetWeekStart) {
+      throw new Error("source_week_start and target_week_start must be different");
+    }
+
+    await this.ensureWeek(input.targetWeekStart);
+
+    const targetCountResult = await queryDatabase<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM shifts
+       WHERE week_start = $1`,
+      [input.targetWeekStart],
+    );
+    const targetShiftCount = Number(targetCountResult.rows[0]?.count ?? 0);
+    if (targetShiftCount > 0) {
+      throw new Error("Target week already has shifts");
+    }
+
+    const insertResult = await queryDatabase<ShiftRow>(
+      `INSERT INTO shifts (week_start, shift_date, start_time, end_time, min_doctors, min_nurses)
+       SELECT $2::date AS week_start,
+              ($2::date + (s.shift_date - $1::date))::date AS shift_date,
+              s.start_time,
+              s.end_time,
+              s.min_doctors,
+              s.min_nurses
+       FROM shifts s
+       WHERE s.week_start = $1
+       RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
+                 start_time, end_time, min_doctors, min_nurses, created_at`,
+      [input.sourceWeekStart, input.targetWeekStart],
+    );
+
+    if ((insertResult.rowCount ?? 0) === 0) {
+      throw new Error("Source week has no shifts to duplicate");
+    }
+
+    return {
+      copiedCount: insertResult.rowCount ?? 0,
+    };
   },
 };

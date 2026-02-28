@@ -34,7 +34,7 @@ type Props = {
 
 export default function WeekPickerModal({
   isOpen,
-  weeks,
+  weeks: _weeks,
   selectedWeek,
   onClose,
   onSelectWeekStart,
