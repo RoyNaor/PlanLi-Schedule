@@ -12,6 +12,8 @@ import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import ShiftPage from "./pages/ShiftPage";
+import MySchedulePage from "./pages/MySchedulePage";
+import ScheduleReviewPage from "./pages/ScheduleReviewPage";
 import { AuthService } from "./services/auth.service";
 import Sidebar from "./components/Sidebar";
 
@@ -106,6 +108,24 @@ function App() {
           <Route
             path="/shifts"
             element={session ? <ShiftPage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/schedule"
+            element={session ? <MySchedulePage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/review"
+            element={
+              session ? (
+                session.user.role === "admin" ? (
+                  <ScheduleReviewPage />
+                ) : (
+                  <Navigate to="/schedule" replace />
+                )
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
           />
         </Routes>
       </main>

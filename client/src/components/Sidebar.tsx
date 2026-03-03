@@ -1,4 +1,11 @@
-import { CalendarDays, LogIn, LogOut, MessageCircle, ShieldUser, X } from "lucide-react";
+import {
+  CalendarDays,
+  LogIn,
+  LogOut,
+  MessageCircle,
+  ShieldUser,
+  X,
+} from "lucide-react";
 
 type SidebarProps = {
   open: boolean;
@@ -31,19 +38,18 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Overlay במובייל */}
       {open ? (
         <button
           type="button"
           className="sidebar-overlay"
           onClick={onClose}
-          aria-label="סגור תפריט"
+          aria-label="Close menu"
         />
       ) : null}
 
       <aside
         className={`sidebar ${open ? "is-open" : ""}`}
-        aria-label="תפריט צד"
+        aria-label="Sidebar menu"
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
@@ -58,7 +64,7 @@ export default function Sidebar({
             type="button"
             className="sidebar-close"
             onClick={onClose}
-            aria-label="סגור תפריט"
+            aria-label="Close menu"
           >
             <X size={18} />
           </button>
@@ -71,7 +77,16 @@ export default function Sidebar({
             onClick={() => handleNavigate("/chat")}
           >
             <MessageCircle size={18} />
-            <span>צ׳אט</span>
+            <span>צ'אט</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sidebar-link ${currentPath === "/schedule" ? "is-active" : ""}`}
+            onClick={() => handleNavigate("/schedule")}
+          >
+            <CalendarDays size={18} />
+            <span>השיבוץ השבועי שלי </span>
           </button>
 
           {isAdmin ? (
@@ -91,16 +106,29 @@ export default function Sidebar({
                 onClick={() => handleNavigate("/shifts")}
               >
                 <CalendarDays size={18} />
-                <span>ניהול משמרות</span>
+                <span>ניהול משמרות </span>
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-link ${currentPath === "/review" ? "is-active" : ""}`}
+                onClick={() => handleNavigate("/review")}
+              >
+                <CalendarDays size={18} />
+                <span>סקירה וניהול סידור</span>
               </button>
             </>
           ) : null}
         </nav>
 
         <div className="sidebar-footer">
-          <button type="button" className="sidebar-auth" onClick={handleAuthAction}>
+          <button
+            type="button"
+            className="sidebar-auth"
+            onClick={handleAuthAction}
+          >
             {hasSession ? <LogOut size={18} /> : <LogIn size={18} />}
-            <span>{hasSession ? "התנתק" : "התחבר"}</span>
+            <span>{hasSession ? "התנתקות" : "התחברות"}</span>
           </button>
         </div>
       </aside>
