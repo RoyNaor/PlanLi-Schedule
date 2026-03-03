@@ -10,10 +10,10 @@ declare global {
 }
 
 // Extracts bearer auth data and attaches the parsed user identity to the request.
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const token = AuthService.parseBearerToken(req.header("authorization"));
-    req.authUser = AuthService.extractUserFromToken(token);
+    req.authUser = await AuthService.extractUserFromToken(token);
     return next();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unauthorized";

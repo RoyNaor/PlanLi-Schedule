@@ -7,8 +7,9 @@ import WeekBar from "../components/shifts/WeekBar";
 import WeekPickerModal from "../components/shifts/WeekPickerModal";
 import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
 import DuplicateWeekModal from "../components/shifts/DuplicateWeekModal";
+import CollectionDeadlineModal from "../components/shifts/CollectionDeadlineModal";
 
-import type { WeekSummary, Shift } from "../components/types";
+import type { Shift, WeekStatus, WeekSummary } from "../components/types";
 import ShiftFormModal from "../components/shifts/ShiftFormModal";
 import {
   getWeekDates,
@@ -30,6 +31,31 @@ const dateFormatter = new Intl.DateTimeFormat("he-IL", {
   timeZone: ISRAEL_TIMEZONE,
 });
 
+const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const weekStatusLabel: Record<WeekStatus, string> = {
+  DRAFT: "DRAFT",
+  COLLECTING: "COLLECTING",
+  LOCKED: "LOCKED",
+  SOLVED: "SOLVED",
+  PUBLISHED: "PUBLISHED",
+};
+
+const weekStatusStyle: Record<WeekStatus, string> = {
+  DRAFT: "bg-slate-100 text-slate-700",
+  COLLECTING: "bg-emerald-100 text-emerald-800",
+  LOCKED: "bg-amber-100 text-amber-800",
+  SOLVED: "bg-sky-100 text-sky-800",
+  PUBLISHED: "bg-violet-100 text-violet-800",
+};
+
 export default function ShiftPage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
@@ -42,6 +68,8 @@ export default function ShiftPage() {
 
   const [showWeekModal, setShowWeekModal] = useState(false);
   const [showDuplicateWeekModal, setShowDuplicateWeekModal] = useState(false);
+  const [showCollectionDeadlineModal, setShowCollectionDeadlineModal] = useState(false);
+  const [openingCollection, setOpeningCollection] = useState(false);
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
@@ -171,6 +199,34 @@ export default function ShiftPage() {
     () => (selectedWeek ? addDaysToIsoDate(selectedWeek, 7) : ""),
     [selectedWeek],
   );
+
+  const selectedWeekSummary = useMemo(
+    () => weeks.find((week) => week.weekStart === selectedWeek) ?? null,
+    [selectedWeek, weeks],
+  );
+
+  const selectedWeekDeadlineLabel = useMemo(() => {
+    const deadline = selectedWeekSummary?.collectionDeadline;
+    if (!deadline) return "Not set";
+
+    const parsed = new Date(deadline);
+    if (Number.isNaN(parsed.getTime())) return deadline;
+
+    return dateTimeFormatter.format(parsed);
+  }, [selectedWeekSummary]);
+
+  const canOpenCollection = useMemo(() => {
+    if (!selectedWeekSummary) return false;
+    if (selectedWeekSummary.shiftsCount <= 0) return false;
+    if (
+      selectedWeekSummary.status === "LOCKED" ||
+      selectedWeekSummary.status === "SOLVED" ||
+      selectedWeekSummary.status === "PUBLISHED"
+    ) {
+      return false;
+    }
+    return true;
+  }, [selectedWeekSummary]);
 
   const handleSelectWeekStart = useCallback(
     async (weekStart: string) => {
@@ -348,6 +404,39 @@ export default function ShiftPage() {
     [authHeaders, fetchShifts, fetchWeeks, token],
   );
 
+  const openConstraintCollection = useCallback(
+    async (deadlineIso: string) => {
+      if (!selectedWeek) return;
+
+      try {
+        setOpeningCollection(true);
+        await axios.post(
+          `${API_BASE}/weeks/${selectedWeek}/open-collection`,
+          { collection_deadline: deadlineIso },
+          { headers: authHeaders },
+        );
+        await fetchWeeks();
+      } catch (error: any) {
+        console.error("Error opening collection:", error);
+        alert(
+          `Error opening collective mode: ${error.response?.data?.error ?? "Unknown error"}`,
+        );
+        throw error;
+      } finally {
+        setOpeningCollection(false);
+      }
+    },
+    [authHeaders, fetchWeeks, selectedWeek],
+  );
+
+  const handleOpenCollectionNow = useCallback(async () => {
+    try {
+      await openConstraintCollection(new Date().toISOString());
+    } catch {
+      // Error alert is handled inside openConstraintCollection.
+    }
+  }, [openConstraintCollection]);
+
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
 
@@ -372,6 +461,54 @@ export default function ShiftPage() {
           onOpenDuplicate={() => setShowDuplicateWeekModal(true)}
         />
 
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm text-slate-500">Week lifecycle</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                    selectedWeekSummary
+                      ? weekStatusStyle[selectedWeekSummary.status]
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {selectedWeekSummary
+                    ? weekStatusLabel[selectedWeekSummary.status]
+                    : "No week selected"}
+                </span>
+                <span className="text-sm text-slate-600">
+                  Deadline: <strong className="text-slate-900">{selectedWeekDeadlineLabel}</strong>
+                </span>
+              </div>
+              {selectedWeekSummary?.shiftsCount === 0 ? (
+                <p className="text-xs text-amber-700">
+                  Add at least one shift before opening collective collection.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCollectionDeadlineModal(true)}
+                disabled={!canOpenCollection || openingCollection}
+                className="h-10 px-4 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {openingCollection ? "Opening..." : "Make Week COLLECTIVE"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleOpenCollectionNow()}
+                disabled={!canOpenCollection || openingCollection}
+                className="h-10 px-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100 disabled:opacity-50"
+              >
+                Set Deadline to Now
+              </button>
+            </div>
+          </div>
+        </section>
+
         <WeekPickerModal
           isOpen={showWeekModal}
           weeks={weeks}
@@ -387,6 +524,14 @@ export default function ShiftPage() {
           defaultTargetWeek={defaultDuplicateTargetWeek}
           onClose={() => setShowDuplicateWeekModal(false)}
           onSubmit={handleDuplicateWeek}
+        />
+
+        <CollectionDeadlineModal
+          isOpen={showCollectionDeadlineModal}
+          weekStart={selectedWeek}
+          currentDeadline={selectedWeekSummary?.collectionDeadline ?? null}
+          onClose={() => setShowCollectionDeadlineModal(false)}
+          onSubmit={openConstraintCollection}
         />
 
 

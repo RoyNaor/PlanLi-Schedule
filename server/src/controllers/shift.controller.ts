@@ -24,6 +24,23 @@ const duplicateWeekSchema = z.object({
   source_week_start: z.string(),
   target_week_start: z.string(),
 });
+const openCollectionSchema = z.object({
+  collection_deadline: z.string().trim().min(1),
+});
+
+function parseIsoDateTime(value: string): Date | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  // Require explicit timezone offset or UTC marker for deterministic behavior.
+  if (!/([zZ]|[+-]\d{2}:\d{2})$/.test(value)) {
+    return null;
+  }
+
+  return parsed;
+}
 
 async function requireAdmin(req: Request, res: Response) {
   if (!req.authUser?.uid) {
@@ -94,6 +111,14 @@ export const shiftController = {
         week: {
           weekStart: created.week_start,
           createdAt: created.created_at.toISOString(),
+          status: created.status,
+          collectionOpenAt: created.collection_open_at
+            ? created.collection_open_at.toISOString()
+            : null,
+          collectionDeadline: created.collection_deadline
+            ? created.collection_deadline.toISOString()
+            : null,
+          lockedAt: created.locked_at ? created.locked_at.toISOString() : null,
         },
       });
     } catch (error) {
@@ -159,6 +184,75 @@ export const shiftController = {
 
       const message = error instanceof Error ? error.message : "Failed to duplicate week";
       console.error("Error duplicating week:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async openConstraintCollection(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const rawWeekStart = req.params.weekStart;
+      const weekStart = typeof rawWeekStart === "string" ? rawWeekStart : "";
+      if (!isIsoDateString(weekStart)) {
+        return res.status(400).json({ error: "weekStart URL parameter must be YYYY-MM-DD" });
+      }
+
+      const parsedBody = openCollectionSchema.parse(req.body);
+      const deadline = parseIsoDateTime(parsedBody.collection_deadline);
+      if (!deadline) {
+        return res.status(400).json({
+          error:
+            "collection_deadline must be a valid ISO-8601 datetime with timezone offset",
+        });
+      }
+
+      const week = await ShiftService.openConstraintCollection({
+        weekStart,
+        collectionDeadline: deadline,
+      });
+
+      return res.status(200).json({
+        week_start: weekStart,
+        week,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid payload", issues: error.issues });
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to open constraint collection";
+      console.error("Error opening constraint collection:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async lockWeek(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) {
+        return adminCheck.error;
+      }
+
+      const rawWeekStart = req.params.weekStart;
+      const weekStart = typeof rawWeekStart === "string" ? rawWeekStart : "";
+      if (!isIsoDateString(weekStart)) {
+        return res.status(400).json({ error: "weekStart URL parameter must be YYYY-MM-DD" });
+      }
+
+      const week = await ShiftService.lockWeek(weekStart);
+
+      return res.status(200).json({
+        week_start: weekStart,
+        week,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to lock week";
+      console.error("Error locking week:", error);
       return res.status(400).json({ error: message });
     }
   },

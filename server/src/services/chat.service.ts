@@ -38,6 +38,14 @@ interface SendMessageResult {
   assistantText: string;
 }
 
+class ConstraintCollectionClosedError extends Error {}
+
+interface WeekConstraintCollectionRow {
+  week_start: string;
+  status: "DRAFT" | "COLLECTING" | "LOCKED" | "SOLVED" | "PUBLISHED";
+  collection_deadline: Date | null;
+}
+
 const intentEnum = z.enum(["constraint", "schedule_query", "general", "out_of_scope"]);
 const constraintTypeEnum = z.enum(["HARD", "SOFT"]);
 const intentResponseSchema = z.object({
@@ -128,8 +136,8 @@ export const ChatService = {
     ];
 
     const intentResponse = await this.generateAssistantResponse(conversationWithIncomingMessage);
-    const shouldPersistMessages =
-      intentResponse.intent === "constraint" && intentResponse.constraints.length > 0;
+    const isConstraintIntent = intentResponse.intent === "constraint";
+    const shouldPersistMessages = isConstraintIntent;
 
     if (shouldPersistMessages) {
       await this.createMessage({
@@ -140,16 +148,34 @@ export const ChatService = {
       });
     }
 
-    if (intentResponse.intent === "constraint" && intentResponse.constraints.length > 0) {
+    let assistantText = intentResponse.assistant_reply;
+
+    if (isConstraintIntent && intentResponse.constraints.length > 0) {
+      let savedConstraints = 0;
+      let constraintRejectionMessage: string | null = null;
+
       for (const constraint of intentResponse.constraints) {
-        await this.saveConstraint({
-          userId,
-          startTimeIso: constraint.start_time,
-          endTimeIso: constraint.end_time,
-          priority: constraint.type,
-          reason: constraint.reason,
-          sourceMessage: message,
-        });
+        try {
+          await this.saveConstraint({
+            userId,
+            startTimeIso: constraint.start_time,
+            endTimeIso: constraint.end_time,
+            priority: constraint.type,
+            reason: constraint.reason,
+            sourceMessage: message,
+          });
+          savedConstraints += 1;
+        } catch (error) {
+          if (error instanceof ConstraintCollectionClosedError) {
+            constraintRejectionMessage = constraintRejectionMessage ?? error.message;
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      if (savedConstraints === 0 && constraintRejectionMessage) {
+        assistantText = constraintRejectionMessage;
       }
     }
 
@@ -157,14 +183,14 @@ export const ChatService = {
       await this.createMessage({
         conversationId,
         sender: "assistant",
-        content: intentResponse.assistant_reply,
+        content: assistantText,
         intent: intentResponse.intent,
       });
     }
 
     return {
       conversationId,
-      assistantText: intentResponse.assistant_reply,
+      assistantText,
     };
   },
 
@@ -371,6 +397,7 @@ Date resolution rules:
 
     // Persist the Israel-local week anchor for weekly planning queries.
     const weekStart = getWeekStartSundayInIsrael(startDate);
+    await this.ensureConstraintCollectionOpen(weekStart);
 
     await queryDatabase(
       `INSERT INTO constraints (user_id, week_start, start_time, end_time, priority, reason, source_message, is_full_day)
@@ -386,5 +413,53 @@ Date resolution rules:
         isFullDay,
       ],
     );
+  },
+
+  async ensureConstraintCollectionOpen(weekStart: string): Promise<void> {
+    const weekResult = await queryDatabase<WeekConstraintCollectionRow>(
+      `SELECT week_start::text AS week_start, status, collection_deadline
+       FROM weeks
+       WHERE week_start = $1`,
+      [weekStart],
+    );
+
+    const week = weekResult.rows[0];
+    if (!week) {
+      throw new ConstraintCollectionClosedError(
+        "אי אפשר לשמור אילוץ לשבוע הזה כי טרם נפתח חלון איסוף אילוצים.",
+      );
+    }
+
+    if (week.status === "COLLECTING" && week.collection_deadline && week.collection_deadline.getTime() <= Date.now()) {
+      await queryDatabase(
+        `UPDATE weeks
+         SET status = 'LOCKED',
+             locked_at = COALESCE(locked_at, NOW())
+         WHERE week_start = $1
+           AND status = 'COLLECTING'`,
+        [weekStart],
+      );
+      throw new ConstraintCollectionClosedError(
+        "חלון איסוף האילוצים לשבוע הזה הסתיים והוא ננעל.",
+      );
+    }
+
+    if (week.status !== "COLLECTING") {
+      if (week.status === "DRAFT") {
+        throw new ConstraintCollectionClosedError(
+          "השבוע הזה עדיין בטיוטה. מנהל צריך לפתוח חלון איסוף אילוצים.",
+        );
+      }
+
+      if (week.status === "LOCKED") {
+        throw new ConstraintCollectionClosedError(
+          "השבוע הזה כבר נעול ולא ניתן להוסיף אילוצים חדשים.",
+        );
+      }
+
+      throw new ConstraintCollectionClosedError(
+        "אי אפשר לשמור אילוצים לשבוע הזה בשלב הנוכחי.",
+      );
+    }
   },
 };
