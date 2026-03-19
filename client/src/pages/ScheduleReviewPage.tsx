@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Navigate } from "react-router-dom";
-import { BadgeCheck, Eye, Sparkles } from "lucide-react";
+import {
+  BadgeCheck,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Eye,
+  AlertTriangle,
+  Users,
+  Send,
+  Stethoscope,
+  UserRoundPlus,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import {
   addDaysToIsoDate,
@@ -13,6 +26,16 @@ import {
 const API_BASE = "http://localhost:3000/api";
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 
+const roleLabels: Record<string, string> = {
+  doctor: "רופא",
+  nurse: "אחות",
+  admin: "מנהל",
+};
+
+function hebrewRole(role: string) {
+  return roleLabels[role] ?? role;
+}
+
 interface ScheduleVersionSummary {
   id: string;
   weekStart: string;
@@ -22,6 +45,7 @@ interface ScheduleVersionSummary {
   createdBy: string;
   createdAt: string;
   assignmentCount: number;
+  solverMeta: Record<string, unknown> | null;
 }
 
 interface ScheduleAssignment {
@@ -71,10 +95,16 @@ const dateFormatter = new Intl.DateTimeFormat("he-IL", {
   timeZone: ISRAEL_TIMEZONE,
 });
 
+const shortDateFormatter = new Intl.DateTimeFormat("he-IL", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
 const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
   day: "numeric",
   month: "short",
-  year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
   timeZone: ISRAEL_TIMEZONE,
@@ -82,10 +112,52 @@ const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
 
 function formatDateTime(value: string) {
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(parsed.getTime())) return value;
   return dateTimeFormatter.format(parsed);
+}
+
+function SolverQualityBadge({ solverMeta }: { solverMeta: Record<string, unknown> | null }) {
+  if (!solverMeta) return null;
+  const violations =
+    typeof solverMeta.soft_violations === "number" ? solverMeta.soft_violations : null;
+  const wallTime =
+    typeof solverMeta.wall_time_seconds === "number" ? solverMeta.wall_time_seconds : null;
+  const isOptimal = solverMeta.solver_status === "optimal";
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+      {violations !== null && (
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            violations === 0
+              ? "bg-emerald-100 text-emerald-700"
+              : violations <= 2
+                ? "bg-amber-100 text-amber-700"
+                : "bg-red-100 text-red-700"
+          }`}
+        >
+          {violations === 0 ? (
+            <CheckCircle2 className="w-2.5 h-2.5" />
+          ) : (
+            <AlertTriangle className="w-2.5 h-2.5" />
+          )}
+          {violations === 0 ? "ללא הפרות" : `${violations} הפרות`}
+        </span>
+      )}
+      {isOptimal && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+          <CheckCircle2 className="w-2.5 h-2.5" />
+          אופטימלי
+        </span>
+      )}
+      {wallTime !== null && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+          <Clock className="w-2.5 h-2.5" />
+          {wallTime.toFixed(1)} שנ׳
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function ScheduleReviewPage() {
@@ -111,11 +183,16 @@ export default function ScheduleReviewPage() {
     const end = addDaysToIsoDate(weekStart, 6);
     const startDate = parseIsoDateToUtc(weekStart);
     const endDate = parseIsoDateToUtc(end);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      return weekStart;
-    }
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return weekStart;
     return `${dateFormatter.format(startDate)} - ${dateFormatter.format(endDate)}`;
   }, [weekStart]);
+
+  const navigateWeek = useCallback(
+    (offset: number) => {
+      setWeekStart((prev) => addDaysToIsoDate(prev, offset));
+    },
+    [],
+  );
 
   const fetchPublished = useCallback(async () => {
     try {
@@ -139,7 +216,6 @@ export default function ScheduleReviewPage() {
         setSelectedVersion(null);
         return;
       }
-
       const response = await axios.get<VersionDetailResponse>(
         `${API_BASE}/schedule-versions/${versionId}`,
         { headers: authHeaders },
@@ -150,18 +226,13 @@ export default function ScheduleReviewPage() {
   );
 
   const handleFocusPublishedVersion = useCallback(async () => {
-    if (!publishedVersion) {
-      return;
-    }
-
+    if (!publishedVersion) return;
     setSelectedVersionId(publishedVersion.id);
     await fetchVersionDetail(publishedVersion.id);
   }, [fetchVersionDetail, publishedVersion]);
 
   const publishedVersionSummary = useMemo(() => {
-    if (!publishedVersion) {
-      return null;
-    }
+    if (!publishedVersion) return null;
     return versions.find((version) => version.id === publishedVersion.id) ?? null;
   }, [publishedVersion, versions]);
 
@@ -202,17 +273,12 @@ export default function ScheduleReviewPage() {
   }, [authHeaders, fetchPublished, fetchVersionDetail, selectedVersionId, weekStart]);
 
   useEffect(() => {
-    if (!token || !weekStart) {
-      return;
-    }
+    if (!token || !weekStart) return;
     void fetchVersions();
   }, [fetchVersions, token, weekStart]);
 
   const handlePublish = async () => {
-    if (!selectedVersionId) {
-      return;
-    }
-
+    if (!selectedVersionId) return;
     try {
       setPublishing(true);
       setError("");
@@ -230,182 +296,283 @@ export default function ScheduleReviewPage() {
     }
   };
 
+  // Group assignments by shift date for better readability
+  const groupedAssignments = useMemo(() => {
+    if (!selectedVersion) return [];
+    const map = new Map<string, ScheduleAssignment[]>();
+    for (const a of selectedVersion.assignments) {
+      const key = `${a.shiftDate}|${a.startTime}-${a.endTime}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(a);
+    }
+    return Array.from(map.entries()).map(([key, assignments]) => {
+      const doctors = assignments.filter((a) => a.userRole === "doctor");
+      const nurses = assignments.filter((a) => a.userRole === "nurse");
+      return {
+        key,
+        shiftDate: assignments[0].shiftDate,
+        startTime: assignments[0].startTime,
+        endTime: assignments[0].endTime,
+        doctors,
+        nurses,
+        total: assignments.length,
+      };
+    });
+  }, [selectedVersion]);
+
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/schedule" replace />;
 
   return (
     <div dir="rtl" className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">סקירה ופרסום סידור</h1>
-          <p className="text-slate-500 mt-1">בחירת גרסת סידור, סקירה ופרסום לשבוע.</p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-slate-700 mb-1">תחילת שבוע</label>
-            <input
-              type="date"
-              value={weekStart}
-              onChange={(event) => setWeekStart(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            />
+      <div className="max-w-6xl mx-auto space-y-5">
+        {/* Header row */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">סקירת סידור</h1>
+            <p className="text-sm text-slate-500 mt-0.5">סקירה, השוואה ופרסום גרסאות סידור לצוות.</p>
           </div>
           <button
             type="button"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100"
-            onClick={() => setWeekStart(startOfWeekSundayIso(getJerusalemTodayIsoDate()))}
-          >
-            השבוע הנוכחי
-          </button>
-          <button
-            type="button"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-60"
+            className="h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-2 self-start"
             onClick={handlePublish}
             disabled={!selectedVersionId || publishing}
           >
+            <Send className="w-4 h-4" />
             {publishing ? "מפרסם..." : "פרסם גרסה נבחרת"}
           </button>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">טווח השבוע: {weekLabel}</p>
-          <p className="text-sm text-slate-600 mt-1">
-            גרסה שפורסמה:{" "}
-            {publishedVersion ? `#${publishedVersion.versionNumber}` : "עדיין לא פורסמה"}
-          </p>
-        </div>
+        {/* Week navigator */}
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => navigateWeek(7)}
+            className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4 text-slate-600" />
+          </button>
 
-        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                Published Snapshot
-              </p>
-              <h2 className="text-xl font-bold text-slate-900 mt-1 inline-flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-700" />
-                {publishedVersion
-                  ? `Version #${publishedVersion.versionNumber}`
-                  : "No published version yet"}
-              </h2>
-              <p className="text-sm text-slate-600 mt-2">
-                {publishedVersion
-                  ? "This is the schedule currently visible to staff for this week."
-                  : "Publish one of the available versions to make it visible to staff."}
-              </p>
-            </div>
-
-            {publishedVersion ? (
-              <button
-                type="button"
-                onClick={() => void handleFocusPublishedVersion()}
-                className="h-10 px-4 rounded-lg border border-emerald-300 bg-white/80 text-emerald-900 text-sm font-medium hover:bg-white inline-flex items-center gap-2 self-start"
-              >
-                <Eye className="w-4 h-4" />
-                Focus Published Version
-              </button>
-            ) : null}
+          <div className="flex items-center gap-3 text-sm">
+            <Calendar className="w-4 h-4 text-emerald-600" />
+            <span className="font-semibold text-slate-900">{weekLabel}</span>
+            <button
+              type="button"
+              onClick={() => setWeekStart(startOfWeekSundayIso(getJerusalemTodayIsoDate()))}
+              className="text-xs text-emerald-600 font-medium hover:underline"
+            >
+              היום
+            </button>
           </div>
 
-          {publishedVersion ? (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-xl bg-white/80 border border-white px-3 py-3">
-                <p className="text-xs text-slate-500">Assignments</p>
-                <p className="text-base font-semibold text-slate-900 mt-1">
-                  {publishedVersionSummary?.assignmentCount ?? "-"}
-                </p>
+          <button
+            type="button"
+            onClick={() => navigateWeek(-7)}
+            className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-600" />
+          </button>
+        </div>
+
+        {/* Published status bar */}
+        {publishedVersion ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
+                <BadgeCheck className="w-5 h-5 text-white" />
               </div>
-              <div className="rounded-xl bg-white/80 border border-white px-3 py-3">
-                <p className="text-xs text-slate-500">Version Created At</p>
-                <p className="text-base font-semibold text-slate-900 mt-1">
-                  {formatDateTime(publishedVersion.createdAt)}
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">
+                  גרסה #{publishedVersion.versionNumber} פעילה
                 </p>
-              </div>
-              <div className="rounded-xl bg-white/80 border border-white px-3 py-3">
-                <p className="text-xs text-slate-500">Status</p>
-                <p className="text-base font-semibold text-emerald-700 mt-1 inline-flex items-center gap-1">
-                  <BadgeCheck className="w-4 h-4" />
-                  Live
+                <p className="text-xs text-emerald-700">
+                  {publishedVersionSummary?.assignmentCount ?? 0} שיבוצים
+                  {" · "}
+                  פורסמה {formatDateTime(publishedVersion.createdAt)}
                 </p>
               </div>
             </div>
-          ) : null}
-        </div>
+            <button
+              type="button"
+              onClick={() => void handleFocusPublishedVersion()}
+              className="h-9 px-4 rounded-lg border border-emerald-300 bg-white text-emerald-800 text-xs font-medium hover:bg-emerald-50 inline-flex items-center gap-1.5 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              הצג
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-400 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">אין גרסה מפורסמת</p>
+              <p className="text-xs text-amber-700">יש לבחור גרסה ולפרסם כדי להציג את הסידור לצוות.</p>
+            </div>
+          </div>
+        )}
 
-        {error ? <p className="text-rose-600">{error}</p> : null}
-        {loading ? <p className="text-slate-500">טוען...</p> : null}
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+        {loading ? <p className="text-slate-500 text-sm">טוען...</p> : null}
 
         {!loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900">גרסאות זמינות</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* Versions sidebar */}
+            <div className="lg:col-span-3 space-y-2">
+              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
+                גרסאות ({versions.length})
+              </h2>
               {versions.length === 0 ? (
-                <p className="text-sm text-slate-500">אין גרסאות לשבוע הזה.</p>
+                <p className="text-sm text-slate-500 px-1">אין גרסאות לשבוע זה.</p>
               ) : (
-                versions.map((version) => (
-                  <button
-                    key={version.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVersionId(version.id);
-                      void fetchVersionDetail(version.id);
-                    }}
-                    className={`w-full text-right rounded-lg border px-3 py-3 transition ${
-                      selectedVersionId === version.id
-                        ? "border-slate-900 bg-slate-50"
-                        : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <p className="font-medium text-slate-900">גרסה #{version.versionNumber}</p>
-                    <p className="text-xs text-slate-500 mt-1">שיבוצים: {version.assignmentCount}</p>
-                    {version.isPublished ? (
-                      <p className="text-xs text-emerald-700 mt-1">פורסם</p>
-                    ) : null}
-                  </button>
-                ))
+                <div className="space-y-2">
+                  {versions.map((version) => {
+                    const isSelected = selectedVersionId === version.id;
+                    return (
+                      <button
+                        key={version.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVersionId(version.id);
+                          void fetchVersionDetail(version.id);
+                        }}
+                        className={`w-full text-right rounded-xl border p-3 transition-all ${
+                          isSelected
+                            ? "border-emerald-400 bg-white shadow-md ring-1 ring-emerald-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`text-sm font-semibold ${isSelected ? "text-emerald-700" : "text-slate-800"}`}>
+                            #{version.versionNumber}
+                          </p>
+                          {version.isPublished && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                              <BadgeCheck className="w-2.5 h-2.5" />
+                              פעילה
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {version.assignmentCount} שיבוצים
+                        </p>
+                        <SolverQualityBadge solverMeta={version.solverMeta} />
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
-            <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-4">
-              <h2 className="text-lg font-semibold text-slate-900 mb-3">פרטי גרסה</h2>
+            {/* Schedule detail */}
+            <div className="lg:col-span-9">
               {!selectedVersion ? (
-                <p className="text-sm text-slate-500">בחר גרסה להצגה.</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+                  <p className="text-sm text-slate-500">בחר גרסה מהרשימה לצפייה בפרטי הסידור.</p>
+                </div>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-600">
-                    גרסה #{selectedVersion.versionNumber} | שיבוצים:{" "}
-                    {selectedVersion.assignments.length}
-                  </p>
-
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th className="text-right px-4 py-3">תאריך</th>
-                          <th className="text-right px-4 py-3">שעה</th>
-                          <th className="text-right px-4 py-3">עובד</th>
-                          <th className="text-right px-4 py-3">תפקיד</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedVersion.assignments.map((assignment) => (
-                          <tr
-                            key={`${assignment.shiftId}-${assignment.userId}`}
-                            className="border-t border-slate-100"
-                          >
-                            <td className="px-4 py-3">
-                              {dateFormatter.format(parseIsoDateToUtc(assignment.shiftDate))}
-                            </td>
-                            <td className="px-4 py-3">
-                              {assignment.startTime} - {assignment.endTime}
-                            </td>
-                            <td className="px-4 py-3">{assignment.userFullName}</td>
-                            <td className="px-4 py-3">{assignment.userRole}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  {/* Version header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-bold text-slate-900">
+                        גרסה #{selectedVersion.versionNumber}
+                      </h2>
+                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        <Users className="w-3.5 h-3.5" />
+                        {selectedVersion.assignments.length} שיבוצים
+                      </span>
+                    </div>
+                    {selectedVersion.isPublished && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                        <BadgeCheck className="w-3.5 h-3.5" />
+                        גרסה פעילה
+                      </span>
+                    )}
                   </div>
+
+                  {/* Shift cards */}
+                  {groupedAssignments.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                      <p className="text-sm text-slate-500">אין שיבוצים בגרסה זו.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {groupedAssignments.map((group) => (
+                        <div
+                          key={group.key}
+                          className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
+                        >
+                          {/* Shift header */}
+                          <div className="bg-gradient-to-l from-slate-50 to-slate-100 px-4 py-3 border-b border-slate-200">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold text-slate-800">
+                                {shortDateFormatter.format(parseIsoDateToUtc(group.shiftDate))}
+                              </p>
+                              <span className="text-xs font-mono text-slate-600 bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                                {group.startTime} - {group.endTime}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
+                              <span className="inline-flex items-center gap-1">
+                                <Stethoscope className="w-3 h-3" />
+                                {group.doctors.length} רופאים
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <UserRoundPlus className="w-3 h-3" />
+                                {group.nurses.length} אחיות
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Staff rows */}
+                          <div className="divide-y divide-slate-100">
+                            {group.doctors.map((a) => (
+                              <div
+                                key={`${a.shiftId}-${a.userId}`}
+                                className="px-4 py-2.5 flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <Stethoscope className="w-3 h-3 text-blue-600" />
+                                  </div>
+                                  <span className="text-sm font-medium text-slate-800">
+                                    {a.userFullName}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-semibold text-blue-600">
+                                  {hebrewRole(a.userRole)}
+                                </span>
+                              </div>
+                            ))}
+                            {group.nurses.map((a) => (
+                              <div
+                                key={`${a.shiftId}-${a.userId}`}
+                                className="px-4 py-2.5 flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center">
+                                    <UserRoundPlus className="w-3 h-3 text-pink-600" />
+                                  </div>
+                                  <span className="text-sm font-medium text-slate-800">
+                                    {a.userFullName}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-semibold text-pink-600">
+                                  {hebrewRole(a.userRole)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

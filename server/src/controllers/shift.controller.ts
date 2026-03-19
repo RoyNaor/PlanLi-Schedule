@@ -69,8 +69,10 @@ function validateShiftPayload(payload: z.infer<typeof createShiftSchema>) {
     throw new Error("start_time and end_time must use HH:mm or HH:mm:ss format");
   }
 
-  if (payload.start_time >= payload.end_time) {
-    throw new Error("start_time must be before end_time");
+  // Allow overnight shifts (e.g. 22:00 → 06:00 next day).
+  // start_time === end_time is still invalid (zero-duration shift).
+  if (payload.start_time === payload.end_time) {
+    throw new Error("start_time and end_time cannot be identical");
   }
 
   if (!isDateInsideWeek(payload.week_start, payload.shift_date)) {

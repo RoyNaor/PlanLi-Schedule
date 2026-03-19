@@ -66,6 +66,7 @@ interface AssignmentInput {
 
 interface ScheduleVersionSummaryRow extends ScheduleVersionRow {
   assignment_count: string;
+  solver_meta?: Record<string, unknown> | null;
 }
 
 interface ScheduleAssignmentRow {
@@ -101,6 +102,7 @@ export interface ScheduleVersionSummary {
   createdBy: string;
   createdAt: string;
   assignmentCount: number;
+  solverMeta: Record<string, unknown> | null;
 }
 
 export interface ScheduleAssignmentView {
@@ -170,6 +172,7 @@ function mapScheduleVersionSummary(row: ScheduleVersionSummaryRow): ScheduleVers
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
     assignmentCount: Number(row.assignment_count),
+    solverMeta: row.solver_meta ?? null,
   };
 }
 
@@ -375,8 +378,8 @@ export const ScheduleService = {
       throw new Error("Week not found");
     }
 
-    if (week.status !== "LOCKED") {
-      throw new Error("Week must be LOCKED before solving");
+    if (!["LOCKED", "SOLVED", "PUBLISHED"].includes(week.status)) {
+      throw new Error("Week must be LOCKED, SOLVED, or PUBLISHED before solving");
     }
 
     const payload = await this.buildSolverPayload(weekStart);
@@ -459,11 +462,13 @@ export const ScheduleService = {
               sv.is_published,
               sv.created_by,
               sv.created_at,
-              COUNT(sa.id)::text AS assignment_count
+              COUNT(sa.id)::text AS assignment_count,
+              sr.solver_meta
        FROM schedule_versions sv
        LEFT JOIN schedule_assignments sa ON sa.schedule_version_id = sv.id
+       LEFT JOIN schedule_runs sr ON sr.id = sv.run_id
        WHERE sv.week_start = $1
-       GROUP BY sv.id, sv.week_start, sv.run_id, sv.version_number, sv.is_published, sv.created_by, sv.created_at
+       GROUP BY sv.id, sv.week_start, sv.run_id, sv.version_number, sv.is_published, sv.created_by, sv.created_at, sr.solver_meta
        ORDER BY sv.version_number DESC`,
       [weekStart],
     );
@@ -620,8 +625,8 @@ export const ScheduleService = {
       throw new Error("Week not found");
     }
 
-    if (week.status !== "LOCKED") {
-      throw new Error("Week must be LOCKED before running the solver");
+    if (!["LOCKED", "SOLVED", "PUBLISHED"].includes(week.status)) {
+      throw new Error("Week must be LOCKED, SOLVED, or PUBLISHED before running the solver");
     }
 
     const shiftCountResult = await queryDatabase<{ count: string }>(

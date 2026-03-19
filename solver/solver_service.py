@@ -28,6 +28,17 @@ def parse_shift_datetime(date_str: str, time_str: str) -> datetime:
     return dt.replace(tzinfo=JERUSALEM_TZ)
 
 
+def parse_shift_window(date_str: str, start_time_str: str, end_time_str: str) -> tuple[datetime, datetime]:
+    """Parse a shift into (start_dt, end_dt), adding 1 day to end_dt for overnight shifts."""
+    from datetime import timedelta
+    start_dt = parse_shift_datetime(date_str, start_time_str)
+    end_dt = parse_shift_datetime(date_str, end_time_str)
+    # Overnight shift: end time is on the next calendar day.
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return start_dt, end_dt
+
+
 def intervals_overlap(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
     return a_start < b_end and b_start < a_end
 
@@ -81,14 +92,13 @@ def solve() -> Any:
 
         users, shifts, constraints = validate_payload(payload)
 
-        # Precompute parsed shift windows.
+        # Precompute parsed shift windows (overnight shifts supported).
         shift_windows: dict[int, tuple[datetime, datetime]] = {}
         for shift in shifts:
             shift_id = int(shift["id"])
-            start_dt = parse_shift_datetime(str(shift["shift_date"]), str(shift["start_time"]))
-            end_dt = parse_shift_datetime(str(shift["shift_date"]), str(shift["end_time"]))
-            if end_dt <= start_dt:
-                return jsonify({"error": f"shift {shift_id} has end_time <= start_time"}), 400
+            start_dt, end_dt = parse_shift_window(
+                str(shift["shift_date"]), str(shift["start_time"]), str(shift["end_time"])
+            )
             shift_windows[shift_id] = (start_dt, end_dt)
 
         user_role = {str(u["id"]): str(u["role"]) for u in users}
@@ -139,8 +149,8 @@ def solve() -> Any:
                     }
                 )
 
-            model.Add(sum(doctor_vars) >= min_doctors)
-            model.Add(sum(nurse_vars) >= min_nurses)
+            model.Add(sum(doctor_vars) == min_doctors)
+            model.Add(sum(nurse_vars) == min_nurses)
 
         # One staff member cannot be assigned to overlapping shifts.
         ordered_shift_ids = sorted(shift_by_id.keys())
@@ -204,10 +214,18 @@ def solve() -> Any:
             model.Add(imbalance == max_load - min_load)
             fairness_terms.append(imbalance)
 
-        # Objective: prioritize honoring soft constraints, then fairness.
+        # Objective: prioritize honoring soft constraints, then fairness,
+        # then minimize total assignments (avoid over-staffing).
+        SOFT_PENALTY_WEIGHT = 100
+        FAIRNESS_WEIGHT = 10
+        OVERSTAFFING_WEIGHT = 1
+
         objective_terms: list[Any] = []
-        objective_terms.extend(soft_penalties)
-        objective_terms.extend(term * 2 for term in fairness_terms)
+        objective_terms.extend(p * SOFT_PENALTY_WEIGHT for p in soft_penalties)
+        objective_terms.extend(term * FAIRNESS_WEIGHT for term in fairness_terms)
+        # Penalize each assignment lightly so the solver prefers minimum coverage.
+        for var in assignment_vars.values():
+            objective_terms.append(var * OVERSTAFFING_WEIGHT)
         model.Minimize(sum(objective_terms) if objective_terms else 0)
 
         solver = cp_model.CpSolver()

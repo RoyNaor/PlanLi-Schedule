@@ -1,4 +1,4 @@
-import { CalendarClock, X } from "lucide-react";
+import { CalendarClock, Clock, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type Props = {
@@ -60,26 +60,31 @@ export default function CollectionDeadlineModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/45 flex items-center justify-center px-4">
-      <section className="w-full max-w-xl bg-white rounded-2xl border-2 border-slate-800 shadow-xl p-6">
-        <div className="flex items-center justify-between mb-5">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4">
+      <section dir="rtl" className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-l from-emerald-600 to-emerald-500 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-emerald-700" />
-            <h2 className="text-2xl font-semibold text-slate-900">Set Collective Deadline</h2>
+            <CalendarClock className="w-5 h-5 text-white/80" />
+            <h2 className="text-lg font-bold text-white">קביעת דדליין לאיסוף</h2>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-700">
-            <X className="w-6 h-6" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4 text-white" />
           </button>
         </div>
 
         <form
-          className="space-y-4"
+          className="p-6 space-y-5"
           onSubmit={async (event) => {
             event.preventDefault();
 
             const deadlineIso = localInputToIso(deadlineInput);
             if (!deadlineIso) {
-              alert("Please provide a valid deadline.");
+              alert("יש להזין תאריך ושעה תקינים.");
               return;
             }
 
@@ -93,49 +98,52 @@ export default function CollectionDeadlineModal({
           }}
         >
           <p className="text-sm text-slate-600">
-            Week start: <strong className="text-slate-900">{weekStart || "-"}</strong>
+            תחילת שבוע: <strong className="text-slate-900">{weekStart || "-"}</strong>
           </p>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-slate-600">Collection deadline</span>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              דדליין לאיסוף אילוצים
+            </span>
             <input
               type="datetime-local"
               value={deadlineInput}
               onChange={(event) => setDeadlineInput(event.target.value)}
               required
-              className="h-11 rounded-xl border border-slate-300 px-3"
+              className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
             />
           </label>
 
-          <p className="text-xs text-slate-500">
-            The selected date/time is sent with timezone information to the API.
+          <p className="text-xs text-slate-400">
+            התאריך והשעה נשלחים לשרת עם מידע על אזור הזמן המקומי.
           </p>
 
-          <div className="flex items-center justify-between gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setDeadlineInput(toLocalDateTimeInputValue(new Date()))}
-              className="h-11 px-4 rounded-xl border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100"
-            >
-              Set Deadline to Now
-            </button>
-
+          {/* Actions */}
+          <div className="space-y-2 pt-1">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-11 px-4 rounded-xl border border-slate-300 text-slate-700"
-              >
-                Cancel
-              </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="h-11 px-5 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-60"
+                className="flex-1 h-11 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
               >
-                {saving ? "Saving..." : "Open Collection"}
+                {saving ? "שומר..." : "פתח איסוף אילוצים"}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-11 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+              >
+                ביטול
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setDeadlineInput(toLocalDateTimeInputValue(new Date()))}
+              className="w-full h-10 rounded-xl border border-amber-200 text-amber-800 bg-amber-50 text-sm font-medium hover:bg-amber-100 transition-colors"
+            >
+              קבע דדליין לעכשיו
+            </button>
           </div>
         </form>
       </section>

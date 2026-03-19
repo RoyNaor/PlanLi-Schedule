@@ -46,8 +46,6 @@ router.get("/api/shifts/week/:weekStart", requireAuth, shiftController.listShift
 router.put("/api/shifts/:shiftId", requireAuth, shiftController.updateShift);
 router.delete("/api/shifts/:shiftId", requireAuth, shiftController.deleteShift);
 
-router.post("/solve", requireAuth, scheduleController.solveWeekDirect);
-router.post("/api/solve", requireAuth, scheduleController.solveWeekDirect);
 router.post("/api/weeks/:weekStart/solve", requireAuth, scheduleController.queueSolveWeek);
 router.get("/api/weeks/:weekStart/solve-runs", requireAuth, scheduleController.listRunsByWeek);
 router.get("/api/solve-runs/:runId", requireAuth, scheduleController.getRunById);
