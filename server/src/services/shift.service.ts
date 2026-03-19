@@ -1,5 +1,7 @@
 import { queryDatabase } from "./database.service.js";
 
+export type WeekStatus = "DRAFT" | "COLLECTING" | "LOCKED" | "SOLVED" | "PUBLISHED";
+
 interface ShiftRow {
   id: number;
   week_start: string;
@@ -14,11 +16,17 @@ interface ShiftRow {
 interface ShiftWeekRow {
   week_start: string;
   created_at: Date;
+  status: WeekStatus;
+  collection_open_at: Date | null;
+  collection_deadline: Date | null;
+  locked_at: Date | null;
 }
 
-interface WeekSummaryRow {
-  week_start: string;
-  created_at: Date;
+interface WeekSummaryRow extends ShiftWeekRow {
+  shifts_count: string;
+}
+
+interface WeekWithShiftCountRow extends ShiftWeekRow {
   shifts_count: string;
 }
 
@@ -48,6 +56,19 @@ export interface WeekSummary {
   weekStart: string;
   createdAt: string;
   shiftsCount: number;
+  status: WeekStatus;
+  collectionOpenAt: string | null;
+  collectionDeadline: string | null;
+  lockedAt: string | null;
+}
+
+export interface WeekLifecycle {
+  weekStart: string;
+  createdAt: string;
+  status: WeekStatus;
+  collectionOpenAt: string | null;
+  collectionDeadline: string | null;
+  lockedAt: string | null;
 }
 
 export interface Shift {
@@ -66,6 +87,21 @@ function mapWeekSummary(row: WeekSummaryRow): WeekSummary {
     weekStart: row.week_start,
     createdAt: row.created_at.toISOString(),
     shiftsCount: Number(row.shifts_count),
+    status: row.status,
+    collectionOpenAt: row.collection_open_at ? row.collection_open_at.toISOString() : null,
+    collectionDeadline: row.collection_deadline ? row.collection_deadline.toISOString() : null,
+    lockedAt: row.locked_at ? row.locked_at.toISOString() : null,
+  };
+}
+
+function mapWeekLifecycle(row: ShiftWeekRow): WeekLifecycle {
+  return {
+    weekStart: row.week_start,
+    createdAt: row.created_at.toISOString(),
+    status: row.status,
+    collectionOpenAt: row.collection_open_at ? row.collection_open_at.toISOString() : null,
+    collectionDeadline: row.collection_deadline ? row.collection_deadline.toISOString() : null,
+    lockedAt: row.locked_at ? row.locked_at.toISOString() : null,
   };
 }
 
@@ -83,6 +119,42 @@ function mapShift(row: ShiftRow): Shift {
 }
 
 export const ShiftService = {
+  async lockExpiredCollectionWeeks(): Promise<number> {
+    const result = await queryDatabase<{ week_start: string }>(
+      `UPDATE weeks
+       SET status = 'LOCKED',
+           locked_at = COALESCE(locked_at, NOW())
+       WHERE status = 'COLLECTING'
+         AND collection_deadline IS NOT NULL
+         AND collection_deadline <= NOW()
+       RETURNING week_start::text AS week_start`,
+    );
+
+    return result.rowCount ?? 0;
+  },
+
+  async getWeekLifecycle(weekStart: string): Promise<WeekLifecycle | null> {
+    await this.lockExpiredCollectionWeeks();
+
+    const result = await queryDatabase<ShiftWeekRow>(
+      `SELECT week_start::text AS week_start,
+              created_at,
+              status,
+              collection_open_at,
+              collection_deadline,
+              locked_at
+       FROM weeks
+       WHERE week_start = $1`,
+      [weekStart],
+    );
+
+    if ((result.rowCount ?? 0) === 0) {
+      return null;
+    }
+
+    return mapWeekLifecycle(result.rows[0] as ShiftWeekRow);
+  },
+
   async getShiftById(shiftId: number): Promise<Shift | null> {
     const result = await queryDatabase<ShiftRow>(
       `SELECT id, week_start::text AS week_start, shift_date::text AS shift_date,
@@ -100,11 +172,19 @@ export const ShiftService = {
   },
 
   async listWeeks(): Promise<WeekSummary[]> {
+    await this.lockExpiredCollectionWeeks();
+
     const result = await queryDatabase<WeekSummaryRow>(
-      `SELECT w.week_start::text AS week_start, w.created_at, COUNT(s.id) AS shifts_count
+      `SELECT w.week_start::text AS week_start,
+              w.created_at,
+              w.status,
+              w.collection_open_at,
+              w.collection_deadline,
+              w.locked_at,
+              COUNT(s.id) AS shifts_count
        FROM weeks w
        LEFT JOIN shifts s ON s.week_start = w.week_start
-       GROUP BY w.week_start, w.created_at
+       GROUP BY w.week_start, w.created_at, w.status, w.collection_open_at, w.collection_deadline, w.locked_at
        ORDER BY w.week_start DESC`,
     );
 
@@ -117,11 +197,103 @@ export const ShiftService = {
       `INSERT INTO weeks (week_start)
        VALUES ($1)
        ON CONFLICT (week_start) DO UPDATE SET week_start = EXCLUDED.week_start
-       RETURNING week_start::text AS week_start, created_at`,
+       RETURNING week_start::text AS week_start,
+                 created_at,
+                 status,
+                 collection_open_at,
+                 collection_deadline,
+                 locked_at`,
       [weekStart],
     );
 
     return result.rows[0] as ShiftWeekRow;
+  },
+
+  async openConstraintCollection(input: {
+    weekStart: string;
+    collectionDeadline: Date;
+  }): Promise<WeekLifecycle> {
+    await this.lockExpiredCollectionWeeks();
+
+    const weekResult = await queryDatabase<WeekWithShiftCountRow>(
+      `SELECT w.week_start::text AS week_start,
+              w.created_at,
+              w.status,
+              w.collection_open_at,
+              w.collection_deadline,
+              w.locked_at,
+              COUNT(s.id)::text AS shifts_count
+       FROM weeks w
+       LEFT JOIN shifts s ON s.week_start = w.week_start
+       WHERE w.week_start = $1
+       GROUP BY w.week_start, w.created_at, w.status, w.collection_open_at, w.collection_deadline, w.locked_at`,
+      [input.weekStart],
+    );
+
+    const weekRow = weekResult.rows[0];
+    if (!weekRow) {
+      throw new Error("Week not found");
+    }
+
+    const shiftsCount = Number(weekRow.shifts_count);
+    if (shiftsCount <= 0) {
+      throw new Error("Cannot open collection for a week with no shifts");
+    }
+
+    if (weekRow.status === "LOCKED" || weekRow.status === "SOLVED" || weekRow.status === "PUBLISHED") {
+      throw new Error(`Week is already ${weekRow.status} and cannot reopen collection`);
+    }
+
+    const updated = await queryDatabase<ShiftWeekRow>(
+      `UPDATE weeks
+       SET status = 'COLLECTING',
+           collection_open_at = COALESCE(collection_open_at, NOW()),
+           collection_deadline = $2,
+           locked_at = NULL
+       WHERE week_start = $1
+       RETURNING week_start::text AS week_start,
+                 created_at,
+                 status,
+                 collection_open_at,
+                 collection_deadline,
+                 locked_at`,
+      [input.weekStart, input.collectionDeadline.toISOString()],
+    );
+
+    return mapWeekLifecycle(updated.rows[0] as ShiftWeekRow);
+  },
+
+  async lockWeek(weekStart: string): Promise<WeekLifecycle> {
+    await this.lockExpiredCollectionWeeks();
+
+    const existing = await this.getWeekLifecycle(weekStart);
+    if (!existing) {
+      throw new Error("Week not found");
+    }
+
+    if (existing.status === "LOCKED") {
+      return existing;
+    }
+
+    if (existing.status !== "COLLECTING") {
+      throw new Error("Only COLLECTING weeks can be locked");
+    }
+
+    const result = await queryDatabase<ShiftWeekRow>(
+      `UPDATE weeks
+       SET status = 'LOCKED',
+           locked_at = COALESCE(locked_at, NOW())
+       WHERE week_start = $1
+       RETURNING week_start::text AS week_start,
+                 created_at,
+                 status,
+                 collection_open_at,
+                 collection_deadline,
+                 locked_at`,
+      [weekStart],
+    );
+
+    return mapWeekLifecycle(result.rows[0] as ShiftWeekRow);
   },
 
   // Persists one shift linked to an existing (or newly created) week bucket.

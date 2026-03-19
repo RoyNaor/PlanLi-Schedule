@@ -7,10 +7,16 @@ export interface ChatMessage {
   created_at?: string;
 }
 
+export type WeekStatus = "DRAFT" | "COLLECTING" | "LOCKED" | "SOLVED" | "PUBLISHED";
+
 export type WeekSummary = {
   weekStart: string;   // YYYY-MM-DD
   createdAt: string;
   shiftsCount: number;
+  status: WeekStatus;
+  collectionOpenAt: string | null;
+  collectionDeadline: string | null;
+  lockedAt: string | null;
 };
 
 export type Shift = {
