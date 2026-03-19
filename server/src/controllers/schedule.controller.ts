@@ -220,6 +220,85 @@ export const scheduleController = {
     }
   },
 
+  async addAssignment(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) return adminCheck.error;
+
+      const versionId = typeof req.params.versionId === "string" ? req.params.versionId : "";
+      if (!versionId.trim()) {
+        return res.status(400).json({ error: "versionId URL parameter is required" });
+      }
+
+      const shiftId = typeof req.body?.shift_id === "number" ? req.body.shift_id : NaN;
+      const userId = typeof req.body?.user_id === "string" ? req.body.user_id : "";
+
+      if (!Number.isInteger(shiftId) || shiftId <= 0) {
+        return res.status(400).json({ error: "shift_id must be a positive integer" });
+      }
+      if (!userId.trim()) {
+        return res.status(400).json({ error: "user_id is required" });
+      }
+
+      await ScheduleService.addManualAssignment({ versionId, shiftId, userId });
+      const updated = await ScheduleService.getScheduleVersionDetail(versionId);
+      return res.status(200).json({ version: updated });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to add assignment";
+      console.error("Error adding assignment:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async removeAssignment(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) return adminCheck.error;
+
+      const versionId = typeof req.params.versionId === "string" ? req.params.versionId : "";
+      const rawShiftId = typeof req.params.shiftId === "string" ? req.params.shiftId : "";
+      const shiftId = parseInt(rawShiftId, 10);
+      const userId = typeof req.params.userId === "string" ? req.params.userId : "";
+
+      if (!versionId.trim()) {
+        return res.status(400).json({ error: "versionId URL parameter is required" });
+      }
+      if (!Number.isInteger(shiftId) || shiftId <= 0) {
+        return res.status(400).json({ error: "shiftId URL parameter must be a positive integer" });
+      }
+      if (!userId.trim()) {
+        return res.status(400).json({ error: "userId URL parameter is required" });
+      }
+
+      await ScheduleService.removeAssignment({ versionId, shiftId, userId });
+      const updated = await ScheduleService.getScheduleVersionDetail(versionId);
+      return res.status(200).json({ version: updated });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to remove assignment";
+      console.error("Error removing assignment:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async getWeekConstraintsSummary(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) return adminCheck.error;
+
+      const rawWeekStart = req.params.weekStart;
+      const weekStart = typeof rawWeekStart === "string" ? rawWeekStart : "";
+      if (!isIsoDateString(weekStart)) {
+        return res.status(400).json({ error: "weekStart URL parameter must be YYYY-MM-DD" });
+      }
+
+      const summary = await ScheduleService.getWeekConstraintsSummary(weekStart);
+      return res.status(200).json({ week_start: weekStart, summary });
+    } catch (error) {
+      console.error("Error fetching constraints summary:", error);
+      return res.status(500).json({ error: "Failed to fetch constraints summary" });
+    }
+  },
+
   async getMyPublishedSchedule(req: Request, res: Response) {
     try {
       if (!req.authUser?.uid) {

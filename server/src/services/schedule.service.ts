@@ -846,6 +846,102 @@ export const ScheduleService = {
     });
   },
 
+  async addManualAssignment(input: {
+    versionId: string;
+    shiftId: number;
+    userId: string;
+  }): Promise<void> {
+    const version = await this.getScheduleVersionRowById(input.versionId);
+    if (!version) throw new Error("Schedule version not found");
+
+    await queryDatabase(
+      `INSERT INTO schedule_assignments (schedule_version_id, shift_id, user_id, source)
+       VALUES ($1, $2, $3, 'manual')
+       ON CONFLICT (schedule_version_id, shift_id, user_id) DO NOTHING`,
+      [input.versionId, input.shiftId, input.userId],
+    );
+  },
+
+  async removeAssignment(input: {
+    versionId: string;
+    shiftId: number;
+    userId: string;
+  }): Promise<void> {
+    await queryDatabase(
+      `DELETE FROM schedule_assignments
+       WHERE schedule_version_id = $1
+         AND shift_id = $2
+         AND user_id = $3`,
+      [input.versionId, input.shiftId, input.userId],
+    );
+  },
+
+  async getWeekConstraintsSummary(weekStart: string): Promise<
+    Array<{
+      userId: string;
+      fullName: string;
+      role: string;
+      email: string;
+      constraints: Array<{
+        id: string;
+        startTime: string;
+        endTime: string;
+        priority: "HARD" | "SOFT";
+        reason: string | null;
+        isFullDay: boolean;
+      }>;
+    }>
+  > {
+    const usersResult = await queryDatabase<{
+      id: string;
+      email: string;
+      full_name: string;
+      role: string;
+    }>(
+      `SELECT id, email, full_name, role
+       FROM users
+       WHERE role IN ('doctor', 'nurse')
+       ORDER BY role ASC, full_name ASC`,
+    );
+
+    const constraintsResult = await queryDatabase<{
+      id: string;
+      user_id: string;
+      start_time: Date;
+      end_time: Date;
+      priority: "HARD" | "SOFT";
+      reason: string | null;
+      is_full_day: boolean;
+    }>(
+      `SELECT id::text AS id, user_id, start_time, end_time, priority, reason, is_full_day
+       FROM constraints
+       WHERE week_start = $1
+       ORDER BY user_id ASC, start_time ASC`,
+      [weekStart],
+    );
+
+    const constraintsByUser = new Map<string, typeof constraintsResult.rows>();
+    for (const c of constraintsResult.rows) {
+      if (!constraintsByUser.has(c.user_id)) constraintsByUser.set(c.user_id, []);
+      constraintsByUser.get(c.user_id)!.push(c);
+    }
+
+    return usersResult.rows.map((user) => ({
+      userId: user.id,
+      fullName: user.full_name,
+      role: user.role,
+      email: user.email,
+      constraints: (constraintsByUser.get(user.id) ?? []).map((c) => ({
+        id: c.id,
+        startTime: c.start_time.toISOString(),
+        endTime: c.end_time.toISOString(),
+        priority: c.priority,
+        reason: c.reason,
+        isFullDay: c.is_full_day,
+      })),
+    }));
+  },
+
   async persistSolvedVersion(input: {
     weekStart: string;
     runId: string;

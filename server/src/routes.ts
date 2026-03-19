@@ -60,6 +60,21 @@ router.post(
   requireAuth,
   scheduleController.publishScheduleVersion,
 );
+router.post(
+  "/api/schedule-versions/:versionId/assignments",
+  requireAuth,
+  scheduleController.addAssignment,
+);
+router.delete(
+  "/api/schedule-versions/:versionId/assignments/:shiftId/:userId",
+  requireAuth,
+  scheduleController.removeAssignment,
+);
+router.get(
+  "/api/weeks/:weekStart/constraints-summary",
+  requireAuth,
+  scheduleController.getWeekConstraintsSummary,
+);
 router.get("/api/admin/schedule", requireAuth, scheduleController.getPublishedScheduleAdmin);
 router.get("/api/my-schedule", requireAuth, scheduleController.getMyPublishedSchedule);
 

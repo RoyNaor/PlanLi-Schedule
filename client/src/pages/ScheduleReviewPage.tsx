@@ -14,6 +14,11 @@ import {
   UserRoundPlus,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  X,
+  Plus,
+  ShieldAlert,
+  Shield,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import {
@@ -88,6 +93,35 @@ interface PublishedScheduleResponse {
   };
 }
 
+interface StaffMember {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+}
+
+interface ConstraintEntry {
+  id: string;
+  startTime: string;
+  endTime: string;
+  priority: "HARD" | "SOFT";
+  reason: string | null;
+  isFullDay: boolean;
+}
+
+interface StaffConstraintSummary {
+  userId: string;
+  fullName: string;
+  role: string;
+  email: string;
+  constraints: ConstraintEntry[];
+}
+
+interface ConstraintsSummaryResponse {
+  week_start: string;
+  summary: StaffConstraintSummary[];
+}
+
 const dateFormatter = new Intl.DateTimeFormat("he-IL", {
   day: "numeric",
   month: "long",
@@ -105,6 +139,19 @@ const shortDateFormatter = new Intl.DateTimeFormat("he-IL", {
 const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
   day: "numeric",
   month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const constraintDateFormatter = new Intl.DateTimeFormat("he-IL", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: ISRAEL_TIMEZONE,
+});
+
+const constraintTimeFormatter = new Intl.DateTimeFormat("he-IL", {
   hour: "2-digit",
   minute: "2-digit",
   timeZone: ISRAEL_TIMEZONE,
@@ -174,6 +221,17 @@ export default function ScheduleReviewPage() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
 
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
+  const [addSelections, setAddSelections] = useState<Record<number, string>>({});
+
+  // Constraints tab state
+  const [activeTab, setActiveTab] = useState<"schedule" | "constraints">("schedule");
+  const [constraintsSummary, setConstraintsSummary] = useState<StaffConstraintSummary[]>([]);
+  const [constraintsLoading, setConstraintsLoading] = useState(false);
+
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
     [token],
@@ -225,6 +283,34 @@ export default function ScheduleReviewPage() {
     [authHeaders],
   );
 
+  const fetchAllStaff = useCallback(async () => {
+    try {
+      const response = await axios.get<StaffMember[]>(`${API_BASE}/users`, {
+        headers: authHeaders,
+      });
+      setAllStaff(
+        response.data.filter((u) => u.role === "doctor" || u.role === "nurse"),
+      );
+    } catch {
+      // non-critical, just won't show add dropdown
+    }
+  }, [authHeaders]);
+
+  const fetchConstraintsSummary = useCallback(async () => {
+    setConstraintsLoading(true);
+    try {
+      const response = await axios.get<ConstraintsSummaryResponse>(
+        `${API_BASE}/weeks/${weekStart}/constraints-summary`,
+        { headers: authHeaders },
+      );
+      setConstraintsSummary(response.data.summary);
+    } catch {
+      setConstraintsSummary([]);
+    } finally {
+      setConstraintsLoading(false);
+    }
+  }, [authHeaders, weekStart]);
+
   const handleFocusPublishedVersion = useCallback(async () => {
     if (!publishedVersion) return;
     setSelectedVersionId(publishedVersion.id);
@@ -275,7 +361,15 @@ export default function ScheduleReviewPage() {
   useEffect(() => {
     if (!token || !weekStart) return;
     void fetchVersions();
-  }, [fetchVersions, token, weekStart]);
+    setEditMode(false);
+    setAddSelections({});
+  }, [token, weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab === "constraints") {
+      void fetchConstraintsSummary();
+    }
+  }, [activeTab, weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePublish = async () => {
     if (!selectedVersionId) return;
@@ -296,26 +390,69 @@ export default function ScheduleReviewPage() {
     }
   };
 
-  // Group assignments by shift date for better readability
+  const handleEnterEditMode = () => {
+    void fetchAllStaff();
+    setEditMode(true);
+    setAddSelections({});
+  };
+
+  const handleRemoveAssignment = async (shiftId: number, userId: string) => {
+    if (!selectedVersionId) return;
+    setSaving(true);
+    setError("");
+    try {
+      await axios.delete(
+        `${API_BASE}/schedule-versions/${selectedVersionId}/assignments/${shiftId}/${userId}`,
+        { headers: authHeaders },
+      );
+      await fetchVersionDetail(selectedVersionId);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.error ?? "שגיאה בהסרת שיבוץ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddAssignment = async (shiftId: number) => {
+    const userId = addSelections[shiftId];
+    if (!selectedVersionId || !userId) return;
+    setSaving(true);
+    setError("");
+    try {
+      await axios.post(
+        `${API_BASE}/schedule-versions/${selectedVersionId}/assignments`,
+        { shift_id: shiftId, user_id: userId },
+        { headers: authHeaders },
+      );
+      setAddSelections((prev) => ({ ...prev, [shiftId]: "" }));
+      await fetchVersionDetail(selectedVersionId);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.error ?? "שגיאה בהוספת שיבוץ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Group assignments by shift for display
   const groupedAssignments = useMemo(() => {
     if (!selectedVersion) return [];
-    const map = new Map<string, ScheduleAssignment[]>();
+    const map = new Map<number, ScheduleAssignment[]>();
     for (const a of selectedVersion.assignments) {
-      const key = `${a.shiftDate}|${a.startTime}-${a.endTime}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(a);
+      if (!map.has(a.shiftId)) map.set(a.shiftId, []);
+      map.get(a.shiftId)!.push(a);
     }
-    return Array.from(map.entries()).map(([key, assignments]) => {
+    return Array.from(map.entries()).map(([shiftId, assignments]) => {
       const doctors = assignments.filter((a) => a.userRole === "doctor");
       const nurses = assignments.filter((a) => a.userRole === "nurse");
       return {
-        key,
+        shiftId,
         shiftDate: assignments[0].shiftDate,
         startTime: assignments[0].startTime,
         endTime: assignments[0].endTime,
         doctors,
         nurses,
         total: assignments.length,
+        assignedUserIds: new Set(assignments.map((a) => a.userId)),
       };
     });
   }, [selectedVersion]);
@@ -439,6 +576,8 @@ export default function ScheduleReviewPage() {
                         type="button"
                         onClick={() => {
                           setSelectedVersionId(version.id);
+                          setEditMode(false);
+                          setAddSelections({});
                           void fetchVersionDetail(version.id);
                         }}
                         className={`w-full text-right rounded-xl border p-3 transition-all ${
@@ -469,106 +608,361 @@ export default function ScheduleReviewPage() {
               )}
             </div>
 
-            {/* Schedule detail */}
+            {/* Main content area */}
             <div className="lg:col-span-9">
-              {!selectedVersion ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-                  <p className="text-sm text-slate-500">בחר גרסה מהרשימה לצפייה בפרטי הסידור.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Version header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-bold text-slate-900">
-                        גרסה #{selectedVersion.versionNumber}
-                      </h2>
-                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                        <Users className="w-3.5 h-3.5" />
-                        {selectedVersion.assignments.length} שיבוצים
-                      </span>
-                    </div>
-                    {selectedVersion.isPublished && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                        <BadgeCheck className="w-3.5 h-3.5" />
-                        גרסה פעילה
-                      </span>
-                    )}
-                  </div>
+              {/* Tab bar */}
+              <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-xl w-fit">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("schedule")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "schedule"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  סידור
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("constraints")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "constraints"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  מגבלות עובדים
+                </button>
+              </div>
 
-                  {/* Shift cards */}
-                  {groupedAssignments.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
-                      <p className="text-sm text-slate-500">אין שיבוצים בגרסה זו.</p>
+              {/* Schedule tab */}
+              {activeTab === "schedule" && (
+                <>
+                  {!selectedVersion ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+                      <p className="text-sm text-slate-500">בחר גרסה מהרשימה לצפייה בפרטי הסידור.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {groupedAssignments.map((group) => (
+                    <div className="space-y-4">
+                      {/* Version header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <h2 className="text-lg font-bold text-slate-900">
+                            גרסה #{selectedVersion.versionNumber}
+                          </h2>
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                            <Users className="w-3.5 h-3.5" />
+                            {selectedVersion.assignments.length} שיבוצים
+                          </span>
+                          {selectedVersion.isPublished && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              <BadgeCheck className="w-3.5 h-3.5" />
+                              גרסה פעילה
+                            </span>
+                          )}
+                        </div>
+                        {/* Edit toggle */}
+                        {editMode ? (
+                          <button
+                            type="button"
+                            onClick={() => { setEditMode(false); setAddSelections({}); }}
+                            className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
+                            disabled={saving}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            סיים עריכה
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleEnterEditMode}
+                            className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            עריכה ידנית
+                          </button>
+                        )}
+                      </div>
+
+                      {editMode && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-700 flex items-center gap-2">
+                          <Pencil className="w-3.5 h-3.5 shrink-0" />
+                          מצב עריכה פעיל — ניתן להסיר עובדים משיבוץ או להוסיף עובדים חדשים לכל משמרת.
+                        </div>
+                      )}
+
+                      {/* Shift cards */}
+                      {groupedAssignments.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                          <p className="text-sm text-slate-500">אין שיבוצים בגרסה זו.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {groupedAssignments.map((group) => {
+                            const availableStaff = allStaff.filter(
+                              (s) => !group.assignedUserIds.has(s.id),
+                            );
+                            const selectedAddUserId = addSelections[group.shiftId] ?? "";
+
+                            return (
+                              <div
+                                key={group.shiftId}
+                                className={`rounded-2xl border bg-white overflow-hidden shadow-sm transition-all ${
+                                  editMode ? "border-blue-200 ring-1 ring-blue-50" : "border-slate-200"
+                                }`}
+                              >
+                                {/* Shift header */}
+                                <div className="bg-gradient-to-l from-slate-50 to-slate-100 px-4 py-3 border-b border-slate-200">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-sm font-bold text-slate-800">
+                                      {shortDateFormatter.format(parseIsoDateToUtc(group.shiftDate))}
+                                    </p>
+                                    <span className="text-xs font-mono text-slate-600 bg-white rounded-lg px-2 py-0.5 border border-slate-200">
+                                      {group.startTime} - {group.endTime}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
+                                    <span className="inline-flex items-center gap-1">
+                                      <Stethoscope className="w-3 h-3" />
+                                      {group.doctors.length} רופאים
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                      <UserRoundPlus className="w-3 h-3" />
+                                      {group.nurses.length} אחיות
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Staff rows */}
+                                <div className="divide-y divide-slate-100">
+                                  {[...group.doctors, ...group.nurses].map((a) => (
+                                    <div
+                                      key={`${a.shiftId}-${a.userId}`}
+                                      className="px-4 py-2.5 flex items-center justify-between"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div
+                                          className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                            a.userRole === "doctor"
+                                              ? "bg-blue-100"
+                                              : "bg-pink-100"
+                                          }`}
+                                        >
+                                          {a.userRole === "doctor" ? (
+                                            <Stethoscope className="w-3 h-3 text-blue-600" />
+                                          ) : (
+                                            <UserRoundPlus className="w-3 h-3 text-pink-600" />
+                                          )}
+                                        </div>
+                                        <span className="text-sm font-medium text-slate-800">
+                                          {a.userFullName}
+                                        </span>
+                                        {a.source === "manual" && (
+                                          <span className="text-[10px] rounded-full bg-violet-100 text-violet-600 px-1.5 py-0.5 font-semibold">
+                                            ידני
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`text-[11px] font-semibold ${
+                                            a.userRole === "doctor"
+                                              ? "text-blue-600"
+                                              : "text-pink-600"
+                                          }`}
+                                        >
+                                          {hebrewRole(a.userRole)}
+                                        </span>
+                                        {editMode && (
+                                          <button
+                                            type="button"
+                                            onClick={() => void handleRemoveAssignment(a.shiftId, a.userId)}
+                                            disabled={saving}
+                                            className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors disabled:opacity-50"
+                                            title="הסר שיבוץ"
+                                          >
+                                            <X className="w-3 h-3 text-red-600" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Add employee row (edit mode only) */}
+                                {editMode && (
+                                  <div className="px-4 py-2.5 border-t border-dashed border-blue-200 bg-blue-50/50 flex items-center gap-2">
+                                    <select
+                                      value={selectedAddUserId}
+                                      onChange={(e) =>
+                                        setAddSelections((prev) => ({
+                                          ...prev,
+                                          [group.shiftId]: e.target.value,
+                                        }))
+                                      }
+                                      className="flex-1 text-xs rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      disabled={saving}
+                                    >
+                                      <option value="">בחר עובד להוספה...</option>
+                                      {availableStaff
+                                        .filter((s) => s.role === "doctor")
+                                        .map((s) => (
+                                          <option key={s.id} value={s.id}>
+                                            {s.full_name} (רופא)
+                                          </option>
+                                        ))}
+                                      {availableStaff
+                                        .filter((s) => s.role === "nurse")
+                                        .map((s) => (
+                                          <option key={s.id} value={s.id}>
+                                            {s.full_name} (אחות)
+                                          </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleAddAssignment(group.shiftId)}
+                                      disabled={!selectedAddUserId || saving}
+                                      className="h-7 w-7 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 flex items-center justify-center transition-colors"
+                                      title="הוסף עובד"
+                                    >
+                                      <Plus className="w-3.5 h-3.5 text-white" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Constraints tab */}
+              {activeTab === "constraints" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-slate-700">
+                      מגבלות עובדים לשבוע זה
+                    </h2>
+                    <span className="text-xs text-slate-400">
+                      {constraintsSummary.filter((s) => s.constraints.length > 0).length} עובדים עם מגבלות
+                    </span>
+                  </div>
+
+                  {constraintsLoading ? (
+                    <p className="text-sm text-slate-500">טוען מגבלות...</p>
+                  ) : constraintsSummary.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                      <p className="text-sm text-slate-500">אין עובדים במערכת.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {constraintsSummary.map((staff) => (
                         <div
-                          key={group.key}
+                          key={staff.userId}
                           className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
                         >
-                          {/* Shift header */}
-                          <div className="bg-gradient-to-l from-slate-50 to-slate-100 px-4 py-3 border-b border-slate-200">
-                            <div className="flex items-center justify-between">
-                              <p className="text-sm font-bold text-slate-800">
-                                {shortDateFormatter.format(parseIsoDateToUtc(group.shiftDate))}
-                              </p>
-                              <span className="text-xs font-mono text-slate-600 bg-white rounded-lg px-2 py-0.5 border border-slate-200">
-                                {group.startTime} - {group.endTime}
-                              </span>
+                          {/* Staff header */}
+                          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                  staff.role === "doctor" ? "bg-blue-100" : "bg-pink-100"
+                                }`}
+                              >
+                                {staff.role === "doctor" ? (
+                                  <Stethoscope className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                  <UserRoundPlus className="w-4 h-4 text-pink-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {staff.fullName}
+                                </p>
+                                <p className="text-[11px] text-slate-400">{staff.email}</p>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
-                              <span className="inline-flex items-center gap-1">
-                                <Stethoscope className="w-3 h-3" />
-                                {group.doctors.length} רופאים
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                  staff.role === "doctor"
+                                    ? "bg-blue-50 text-blue-600"
+                                    : "bg-pink-50 text-pink-600"
+                                }`}
+                              >
+                                {hebrewRole(staff.role)}
                               </span>
-                              <span className="inline-flex items-center gap-1">
-                                <UserRoundPlus className="w-3 h-3" />
-                                {group.nurses.length} אחיות
+                              <span
+                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                  staff.constraints.length === 0
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {staff.constraints.length === 0
+                                  ? "ללא מגבלות"
+                                  : `${staff.constraints.length} מגבלות`}
                               </span>
                             </div>
                           </div>
 
-                          {/* Staff rows */}
-                          <div className="divide-y divide-slate-100">
-                            {group.doctors.map((a) => (
-                              <div
-                                key={`${a.shiftId}-${a.userId}`}
-                                className="px-4 py-2.5 flex items-center justify-between"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
-                                    <Stethoscope className="w-3 h-3 text-blue-600" />
+                          {/* Constraint rows */}
+                          {staff.constraints.length === 0 ? (
+                            <div className="px-4 py-3 text-xs text-slate-400 text-center">
+                              לא הוגשו מגבלות לשבוע זה
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-50">
+                              {staff.constraints.map((c) => {
+                                const start = new Date(c.startTime);
+                                const end = new Date(c.endTime);
+                                return (
+                                  <div key={c.id} className="px-4 py-2.5 flex items-start gap-3">
+                                    <div className="mt-0.5">
+                                      {c.priority === "HARD" ? (
+                                        <ShieldAlert className="w-4 h-4 text-red-500" />
+                                      ) : (
+                                        <Shield className="w-4 h-4 text-amber-400" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span
+                                          className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${
+                                            c.priority === "HARD"
+                                              ? "bg-red-100 text-red-700"
+                                              : "bg-amber-100 text-amber-700"
+                                          }`}
+                                        >
+                                          {c.priority === "HARD" ? "חובה" : "העדפה"}
+                                        </span>
+                                        <span className="text-xs text-slate-600 font-medium">
+                                          {constraintDateFormatter.format(start)}
+                                        </span>
+                                        {c.isFullDay ? (
+                                          <span className="text-[11px] text-slate-500">כל היום</span>
+                                        ) : (
+                                          <span className="text-[11px] text-slate-500 font-mono">
+                                            {constraintTimeFormatter.format(start)}–{constraintTimeFormatter.format(end)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {c.reason && (
+                                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                          {c.reason}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
-                                  <span className="text-sm font-medium text-slate-800">
-                                    {a.userFullName}
-                                  </span>
-                                </div>
-                                <span className="text-[11px] font-semibold text-blue-600">
-                                  {hebrewRole(a.userRole)}
-                                </span>
-                              </div>
-                            ))}
-                            {group.nurses.map((a) => (
-                              <div
-                                key={`${a.shiftId}-${a.userId}`}
-                                className="px-4 py-2.5 flex items-center justify-between"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center">
-                                    <UserRoundPlus className="w-3 h-3 text-pink-600" />
-                                  </div>
-                                  <span className="text-sm font-medium text-slate-800">
-                                    {a.userFullName}
-                                  </span>
-                                </div>
-                                <span className="text-[11px] font-semibold text-pink-600">
-                                  {hebrewRole(a.userRole)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
