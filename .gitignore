@@ -23,5 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Firebase service account
+firebase-service-account.json
+
 # misc
 coverage/

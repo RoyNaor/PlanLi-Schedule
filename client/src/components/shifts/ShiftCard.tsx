@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Stethoscope, UserRoundPlus } from "lucide-react";
+import { Moon, Pencil, Stethoscope, Trash2, UserRoundPlus } from "lucide-react";
 import type { Shift } from "../types";
 
 type Props = {
@@ -7,12 +7,29 @@ type Props = {
   onDelete: (shiftId: number) => void;
 };
 
+function isOvernightShift(startTime: string, endTime: string): boolean {
+  return endTime !== "" && startTime !== "" && endTime <= startTime;
+}
+
 export default function ShiftCard({ shift, onEdit, onDelete }: Props) {
+  const overnight = isOvernightShift(shift.startTime, shift.endTime);
+
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm space-y-2">
-      <p className="font-semibold text-slate-800 text-sm">
-        {shift.startTime} - {shift.endTime}
-      </p>
+    <article className={`rounded-xl border p-3 text-xs shadow-sm space-y-2 ${overnight ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200 bg-white"}`}>
+      <div className="flex items-center justify-between gap-1">
+        <p className="font-semibold text-slate-800 text-sm">
+          {shift.startTime} -{" "}
+          <span className={overnight ? "text-indigo-700" : undefined}>
+            {shift.endTime}
+          </span>
+        </p>
+        {overnight && (
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 shrink-0">
+            <Moon className="w-3 h-3" />
+            +1
+          </span>
+        )}
+      </div>
 
       <div className="space-y-1 text-slate-600">
         <p className="flex items-center gap-1">

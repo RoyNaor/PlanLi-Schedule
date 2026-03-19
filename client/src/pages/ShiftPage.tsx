@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { CheckCircle2, Eye, Loader2, Lock, Sparkles, XCircle } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
 import WeekBar from "../components/shifts/WeekBar";
@@ -41,11 +42,11 @@ const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
 });
 
 const weekStatusLabel: Record<WeekStatus, string> = {
-  DRAFT: "DRAFT",
-  COLLECTING: "COLLECTING",
-  LOCKED: "LOCKED",
-  SOLVED: "SOLVED",
-  PUBLISHED: "PUBLISHED",
+  DRAFT: "טיוטה",
+  COLLECTING: "איסוף אילוצים",
+  LOCKED: "נעול",
+  SOLVED: "שובץ",
+  PUBLISHED: "פורסם",
 };
 
 const weekStatusStyle: Record<WeekStatus, string> = {
@@ -78,6 +79,17 @@ export default function ShiftPage() {
   const [shiftModalMode, setShiftModalMode] = useState<"create" | "edit">("create");
   const [draftShiftDate, setDraftShiftDate] = useState("");
   const [shiftToEdit, setShiftToEdit] = useState<Shift | null>(null);
+
+  // Solver flow state
+  type SolveRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  const [activeSolveRun, setActiveSolveRun] = useState<{
+    runId: string;
+    status: SolveRunStatus;
+    errorMessage: string | null;
+  } | null>(null);
+  const [solving, setSolving] = useState(false);
+  const [forceLocking, setForceLocking] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -207,7 +219,7 @@ export default function ShiftPage() {
 
   const selectedWeekDeadlineLabel = useMemo(() => {
     const deadline = selectedWeekSummary?.collectionDeadline;
-    if (!deadline) return "Not set";
+    if (!deadline) return "לא נקבע";
 
     const parsed = new Date(deadline);
     if (Number.isNaN(parsed.getTime())) return deadline;
@@ -419,7 +431,7 @@ export default function ShiftPage() {
       } catch (error: any) {
         console.error("Error opening collection:", error);
         alert(
-          `Error opening collective mode: ${error.response?.data?.error ?? "Unknown error"}`,
+          `שגיאה בפתיחת איסוף אילוצים: ${error.response?.data?.error ?? "שגיאה לא ידועה"}`,
         );
         throw error;
       } finally {
@@ -436,6 +448,90 @@ export default function ShiftPage() {
       // Error alert is handled inside openConstraintCollection.
     }
   }, [openConstraintCollection]);
+
+  // Clear polling interval on unmount.
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  // Reset solver run state when the selected week changes.
+  useEffect(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setActiveSolveRun(null);
+  }, [selectedWeek]);
+
+  const pollSolveRun = useCallback(
+    async (runId: string) => {
+      try {
+        const res = await axios.get<{ run: { id: string; status: string; errorMessage: string | null } }>(
+          `${API_BASE}/solve-runs/${runId}`,
+          { headers: authHeaders },
+        );
+        const run = res.data.run;
+        const status = run.status as "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+        setActiveSolveRun({ runId, status, errorMessage: run.errorMessage });
+
+        if (status === "SUCCEEDED" || status === "FAILED") {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          if (status === "SUCCEEDED") {
+            await fetchWeeks();
+          }
+        }
+      } catch {
+        // Ignore transient network errors during polling.
+      }
+    },
+    [authHeaders, fetchWeeks],
+  );
+
+  const handleSolveWeek = useCallback(async () => {
+    if (!selectedWeek) return;
+    try {
+      setSolving(true);
+      const res = await axios.post<{ queued: boolean; run: { id: string; status: string } }>(
+        `${API_BASE}/weeks/${selectedWeek}/solve`,
+        {},
+        { headers: authHeaders },
+      );
+      const run = res.data.run;
+      setActiveSolveRun({ runId: run.id, status: run.status as "QUEUED", errorMessage: null });
+
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = setInterval(() => {
+        void pollSolveRun(run.id);
+      }, 2000);
+    } catch (error: any) {
+      const msg = error?.response?.data?.error ?? "שגיאה לא ידועה";
+      alert(`שגיאה בהפעלת השיבוץ: ${msg}`);
+    } finally {
+      setSolving(false);
+    }
+  }, [authHeaders, selectedWeek, pollSolveRun]);
+
+  const handleForceLock = useCallback(async () => {
+    if (!selectedWeek) return;
+    try {
+      setForceLocking(true);
+      await axios.post(`${API_BASE}/weeks/${selectedWeek}/lock`, {}, { headers: authHeaders });
+      await fetchWeeks();
+    } catch (error: any) {
+      const msg = error?.response?.data?.error ?? "שגיאה לא ידועה";
+      alert(`שגיאה בנעילת השבוע: ${msg}`);
+    } finally {
+      setForceLocking(false);
+    }
+  }, [authHeaders, selectedWeek, fetchWeeks]);
+
+  const isSolverRunning =
+    activeSolveRun?.status === "QUEUED" || activeSolveRun?.status === "RUNNING";
 
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
@@ -464,7 +560,7 @@ export default function ShiftPage() {
         <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="space-y-1">
-              <p className="text-sm text-slate-500">Week lifecycle</p>
+              <p className="text-sm text-slate-500">מחזור חיי השבוע</p>
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -475,15 +571,15 @@ export default function ShiftPage() {
                 >
                   {selectedWeekSummary
                     ? weekStatusLabel[selectedWeekSummary.status]
-                    : "No week selected"}
+                    : "לא נבחר שבוע"}
                 </span>
                 <span className="text-sm text-slate-600">
-                  Deadline: <strong className="text-slate-900">{selectedWeekDeadlineLabel}</strong>
+                  דדליין: <strong className="text-slate-900">{selectedWeekDeadlineLabel}</strong>
                 </span>
               </div>
               {selectedWeekSummary?.shiftsCount === 0 ? (
                 <p className="text-xs text-amber-700">
-                  Add at least one shift before opening collective collection.
+                  יש להוסיף לפחות משמרת אחת לפני פתיחת איסוף אילוצים.
                 </p>
               ) : null}
             </div>
@@ -495,7 +591,7 @@ export default function ShiftPage() {
                 disabled={!canOpenCollection || openingCollection}
                 className="h-10 px-4 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
               >
-                {openingCollection ? "Opening..." : "Make Week COLLECTIVE"}
+                {openingCollection ? "פותח..." : "פתח איסוף אילוצים"}
               </button>
               <button
                 type="button"
@@ -503,11 +599,118 @@ export default function ShiftPage() {
                 disabled={!canOpenCollection || openingCollection}
                 className="h-10 px-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100 disabled:opacity-50"
               >
-                Set Deadline to Now
+                קבע דדליין לעכשיו
               </button>
             </div>
           </div>
         </section>
+
+        {/* שיבוץ חכם */}
+        {selectedWeekSummary && (
+          <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">שיבוץ חכם</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {selectedWeekSummary.status === "COLLECTING" &&
+                    "ניתן לנעול ידנית לפני הדדליין ולהפעיל שיבוץ חכם."}
+                  {selectedWeekSummary.status === "LOCKED" &&
+                    "השבוע נעול — ניתן להפעיל שיבוץ חכם לחישוב סידור אופטימלי."}
+                  {(selectedWeekSummary.status === "SOLVED" ||
+                    selectedWeekSummary.status === "PUBLISHED") &&
+                    "השיבוץ בוצע — ניתן להפעיל שוב לגרסה חדשה, לסקור ולפרסם."}
+                  {(selectedWeekSummary.status === "DRAFT") &&
+                    "יש לפתוח איסוף אילוצים כדי לאפשר שיבוץ חכם."}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedWeekSummary.status === "COLLECTING" && (
+                  <button
+                    type="button"
+                    onClick={() => void handleForceLock()}
+                    disabled={forceLocking}
+                    className="h-10 px-4 rounded-lg border border-amber-400 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Lock className="w-4 h-4" />
+                    {forceLocking ? "נועל..." : "נעל שבוע עכשיו"}
+                  </button>
+                )}
+
+                {(selectedWeekSummary.status === "LOCKED" ||
+                  selectedWeekSummary.status === "SOLVED" ||
+                  selectedWeekSummary.status === "PUBLISHED") && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSolveWeek()}
+                    disabled={solving || isSolverRunning}
+                    className="h-10 px-4 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSolverRunning ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {solving ? "מתחיל..." : isSolverRunning ? "מחשב..." : "הפעל שיבוץ חכם"}
+                  </button>
+                )}
+
+                {(selectedWeekSummary.status === "SOLVED" ||
+                  selectedWeekSummary.status === "PUBLISHED") && (
+                  <Link
+                    to="/review"
+                    className="h-10 px-4 rounded-lg border border-sky-300 bg-sky-50 text-sky-900 text-sm font-medium hover:bg-sky-100 flex items-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    סקור ופרסם
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* סטטוס שיבוץ */}
+            {activeSolveRun && (
+              <div
+                className={`rounded-xl px-4 py-3 flex items-center gap-3 text-sm ${
+                  activeSolveRun.status === "SUCCEEDED"
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    : activeSolveRun.status === "FAILED"
+                      ? "bg-red-50 border border-red-200 text-red-800"
+                      : "bg-violet-50 border border-violet-200 text-violet-800"
+                }`}
+              >
+                {activeSolveRun.status === "QUEUED" && (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                )}
+                {activeSolveRun.status === "RUNNING" && (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                )}
+                {activeSolveRun.status === "SUCCEEDED" && (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                )}
+                {activeSolveRun.status === "FAILED" && (
+                  <XCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span className="flex-1">
+                  {activeSolveRun.status === "QUEUED" && "השיבוץ בתור — ממתין להפעלה..."}
+                  {activeSolveRun.status === "RUNNING" && "השיבוץ החכם פועל — מחשב סידור אופטימלי..."}
+                  {activeSolveRun.status === "SUCCEEDED" &&
+                    "השיבוץ הושלם בהצלחה! הסידור נוצר — ניתן לסקור ולפרסם."}
+                  {activeSolveRun.status === "FAILED" &&
+                    `השיבוץ נכשל: ${activeSolveRun.errorMessage ?? "שגיאה לא ידועה"}`}
+                </span>
+                {activeSolveRun.status === "SUCCEEDED" && (
+                  <Link
+                    to="/review"
+                    className="font-semibold underline underline-offset-2 shrink-0"
+                  >
+                    לסקירה ←
+                  </Link>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         <WeekPickerModal
           isOpen={showWeekModal}
