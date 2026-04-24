@@ -5,29 +5,6 @@ interface MessageBubbleProps {
   typing?: boolean;
 }
 
-// Draws the assistant avatar used by message and typing bubbles.
-const BotIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <rect x="4" y="8" width="16" height="12" rx="3" fill="white" />
-    <path d="M8 14H10" stroke="#0f766e" strokeWidth="2" strokeLinecap="round" />
-    <path
-      d="M14 14H16"
-      stroke="#0f766e"
-      strokeWidth="2"
-      strokeLinecap="round"
-    />
-    <path d="M12 6V8" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="12" cy="4" r="2" fill="white" />
-  </svg>
-);
-
-// Formats the timestamp shown below each message bubble.
 function formatMessageTime(createdAt?: string) {
   if (!createdAt) {
     return new Date().toLocaleTimeString([], {
@@ -49,24 +26,32 @@ function formatMessageTime(createdAt?: string) {
   });
 }
 
-// Renders either a typing indicator or a styled message bubble row.
+function BotAvatar() {
+  return (
+    <div className="w-8 h-8 rounded-full bg-[#0f2a44] flex items-center justify-center flex-shrink-0 shadow-sm">
+      <span className="text-[9px] font-bold text-white tracking-tight">PL</span>
+    </div>
+  );
+}
+
+function UserAvatar() {
+  return (
+    <div className="w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
+      <span className="text-[10px] font-medium text-slate-600">את/ה</span>
+    </div>
+  );
+}
+
 export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
   if (typing) {
     return (
-      <div className="flex w-full justify-start mb-6">
-        <div className="flex items-end gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] flex-row">
-          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
-            <BotIcon />
-          </div>
-          <div
-            className="px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm bg-emerald-50 border border-emerald-100 text-gray-800 rounded-2xl rounded-bl-sm typing-indicator"
-            dir="auto"
-          >
-            <span className="typing-label">כותב</span>
+      <div className="flex justify-start items-end gap-2 mb-3">
+        <BotAvatar />
+        <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm max-w-[75%]">
+          <div className="typing-indicator">
+            <span className="typing-label text-xs text-slate-500">מקליד</span>
             <span className="typing-dots" aria-hidden="true">
-              <i />
-              <i />
-              <i />
+              <i /><i /><i />
             </span>
           </div>
         </div>
@@ -80,44 +65,23 @@ export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
   const time = formatMessageTime(message.created_at);
 
   return (
-    <div
-      className={`flex w-full ${isUser ? "justify-end" : "justify-start"} mb-6`}
-    >
-      <div
-        className={`flex items-end gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
-      >
-        <div className="flex-shrink-0 mb-5">
-          {isUser ? (
-            <div className="w-9 h-9 rounded-full border border-emerald-200 bg-white flex items-center justify-center text-[10px] text-emerald-700 font-medium shadow-sm">
-              את/ה
-            </div>
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
-              <BotIcon />
-            </div>
-          )}
-        </div>
+    <div className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : ""} mb-3`}>
+      {isUser ? <UserAvatar /> : <BotAvatar />}
 
+      <div className={`max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
         <div
-          className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+          className={`px-4 py-2.5 text-sm leading-relaxed ${
+            isUser
+              ? "bg-[#1d5c8b] text-white rounded-2xl rounded-tl-sm"
+              : "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tr-sm shadow-sm"
+          }`}
+          dir="auto"
         >
-          <div
-            className={`
-              px-3.5 sm:px-5 py-3 sm:py-3.5 shadow-sm text-sm
-              ${
-                isUser
-                  ? "bg-emerald-600 text-white rounded-2xl rounded-br-sm"
-                  : "bg-emerald-50 border border-emerald-100 text-gray-800 rounded-2xl rounded-bl-sm"
-              }
-            `}
-            dir="auto"
-          >
-            <p className="leading-relaxed whitespace-pre-wrap">
-              {message.content}
-            </p>
-          </div>
-          <span className="text-[11px] text-gray-500 mt-1.5 px-1">{time}</span>
+          <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
+        <p className={`text-[10px] text-slate-400 mt-1 px-1 ${isUser ? "text-left" : "text-right"}`}>
+          {time}
+        </p>
       </div>
     </div>
   );

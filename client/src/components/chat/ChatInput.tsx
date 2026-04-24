@@ -1,13 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
-import { FiSend } from "react-icons/fi";
+import { Send, Loader2 } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (value: string) => Promise<void>;
   sending: boolean;
 }
 
-// Captures user text input and triggers send actions from keyboard or button.
 export function ChatInput({ onSend, sending }: ChatInputProps) {
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -15,89 +13,60 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
   const canSubmit = draft.trim().length > 0 && !sending;
 
   useEffect(() => {
-    // Auto-resize textarea to match content while keeping a max height.
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${Math.min(
         textareaRef.current.scrollHeight,
-        120,
+        100,
       )}px`;
     }
   }, [draft]);
 
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    const text = draft.trim();
+    setDraft("");
+    void onSend(text);
+  };
+
   return (
-    <div className="border-t border-emerald-100 bg-white p-3 sm:p-4">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!canSubmit) return;
-          const text = draft.trim();
-          setDraft("");
-          void onSend(text);
-        }}
-        className="relative mx-auto max-w-4xl"
-      >
+    <div className="border-t border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className="flex items-end gap-2 max-w-4xl mx-auto" dir="rtl">
         <textarea
           ref={textareaRef}
           value={draft}
           dir="rtl"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            // Enter sends; Shift+Enter inserts a newline.
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              if (canSubmit) {
-                const text = draft.trim();
-                setDraft("");
-                void onSend(text);
-              }
+              handleSubmit();
             }
           }}
           rows={1}
-          placeholder="כתוב את ההודעה שלך..."
+          placeholder="כתוב הודעה..."
           maxLength={500}
-          className="
-            min-h-[78px] sm:min-h-[96px]
-            w-full
-            resize-none
-            rounded-2xl
-            border border-slate-200
-            bg-white
-            p-4
-            pl-16
-            text-right text-sm
-            leading-relaxed
-            shadow-sm
-            transition
-            focus:outline-none
-            focus:ring-2
-            focus:ring-emerald-500
-          "
-          style={{ maxHeight: "120px" }}
+          className="flex-1 min-h-[40px] max-h-[100px] resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-right leading-snug placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1d5c8b] focus:border-[#1d5c8b] focus:bg-white transition"
         />
 
         <button
-          type="submit"
+          type="button"
+          onClick={handleSubmit}
           disabled={!canSubmit}
-          className={`
-            absolute bottom-3 left-3
-            grid h-10 w-10 place-items-center
-            rounded-full text-sm text-white shadow-md transition
-            ${
-              canSubmit
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : "cursor-not-allowed bg-slate-300"
-            }
-          `}
+          className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+            canSubmit
+              ? "bg-[#1d5c8b] text-white hover:bg-[#164e78] shadow-sm"
+              : "bg-slate-100 text-slate-300 cursor-not-allowed"
+          }`}
           aria-label="שלח הודעה"
         >
           {sending ? (
-            <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <FiSend className="h-4 w-4" />
+            <Send className="w-4 h-4" />
           )}
         </button>
-      </form>
+      </div>
     </div>
   );
 }
