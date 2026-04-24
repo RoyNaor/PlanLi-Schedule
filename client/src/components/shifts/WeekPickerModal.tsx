@@ -135,9 +135,9 @@ export default function WeekPickerModal({
                 }}
                 className={`h-11 rounded-lg text-sm font-medium ${
                   isSelected
-                    ? "bg-emerald-600 text-white"
+                    ? "bg-[#1d5c8b] text-white"
                     : inCurrentMonth
-                      ? "bg-slate-100 text-slate-900 hover:bg-emerald-100"
+                      ? "bg-slate-100 text-slate-900 hover:bg-[#ebf4fb]"
                       : "bg-slate-50 text-slate-400"
                 }`}
               >

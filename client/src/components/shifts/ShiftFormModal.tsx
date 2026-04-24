@@ -78,7 +78,7 @@ export default function ShiftFormModal({
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4">
       <section dir="rtl" className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-l from-emerald-600 to-emerald-500 px-6 py-4 flex items-center justify-between">
+        <div className="bg-[#0f2a44] px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">{title}</h2>
           <button
             type="button"
@@ -128,7 +128,7 @@ export default function ShiftFormModal({
                   setValues((prev) => ({ ...prev, shiftDate: event.target.value }))
                 }
                 required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
             </label>
           </div>
@@ -147,7 +147,7 @@ export default function ShiftFormModal({
                   setValues((prev) => ({ ...prev, startTime: event.target.value }))
                 }
                 required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
             </label>
 
@@ -171,7 +171,7 @@ export default function ShiftFormModal({
                 className={`h-10 rounded-xl border px-3 text-sm outline-none transition-all ${
                   isOvernight
                     ? "border-indigo-300 bg-indigo-50/50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    : "border-slate-200 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    : "border-slate-200 focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb]"
                 }`}
               />
             </label>
@@ -205,7 +205,7 @@ export default function ShiftFormModal({
                   }))
                 }
                 required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
             </label>
 
@@ -225,7 +225,7 @@ export default function ShiftFormModal({
                   }))
                 }
                 required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
             </label>
           </div>
@@ -235,7 +235,7 @@ export default function ShiftFormModal({
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 h-11 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
+              className="flex-1 h-11 rounded-xl bg-[#1d5c8b] text-white font-semibold text-sm hover:bg-[#164e78] disabled:opacity-60 transition-colors shadow-sm"
             >
               {submitLabel}
             </button>
