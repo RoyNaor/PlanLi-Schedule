@@ -170,7 +170,7 @@ export default function DuplicateWeekModal({
             <button
               type="submit"
               disabled={saving || sourceOptions.length === 0}
-              className="h-11 px-5 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-2"
+              className="h-11 px-5 rounded-xl bg-[#1d5c8b] text-white font-medium hover:bg-[#164e78] disabled:opacity-60 inline-flex items-center gap-2"
             >
               <Copy className="w-4 h-4" />
               {saving ? "משכפל..." : "שכפול"}

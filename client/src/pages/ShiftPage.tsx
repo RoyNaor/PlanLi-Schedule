@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Link, Navigate } from "react-router-dom";
-import { CheckCircle2, Eye, Loader2, Lock, Sparkles, XCircle } from "lucide-react";
+import { BrainCircuit, CheckCircle2, Eye, Loader2, Lock, XCircle } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 
 import WeekBar from "../components/shifts/WeekBar";
@@ -50,11 +50,11 @@ const weekStatusLabel: Record<WeekStatus, string> = {
 };
 
 const weekStatusStyle: Record<WeekStatus, string> = {
-  DRAFT: "bg-slate-100 text-slate-700",
-  COLLECTING: "bg-emerald-100 text-emerald-800",
+  DRAFT: "bg-slate-100 text-slate-600",
+  COLLECTING: "bg-blue-100 text-blue-800",
   LOCKED: "bg-amber-100 text-amber-800",
-  SOLVED: "bg-sky-100 text-sky-800",
-  PUBLISHED: "bg-violet-100 text-violet-800",
+  SOLVED: "bg-teal-100 text-teal-800",
+  PUBLISHED: "bg-green-100 text-green-800",
 };
 
 export default function ShiftPage() {
@@ -557,160 +557,135 @@ export default function ShiftPage() {
           onOpenDuplicate={() => setShowDuplicateWeekModal(true)}
         />
 
-        <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-sm text-slate-500">מחזור חיי השבוע</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                    selectedWeekSummary
-                      ? weekStatusStyle[selectedWeekSummary.status]
-                      : "bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {selectedWeekSummary
-                    ? weekStatusLabel[selectedWeekSummary.status]
-                    : "לא נבחר שבוע"}
-                </span>
-                <span className="text-sm text-slate-600">
-                  דדליין: <strong className="text-slate-900">{selectedWeekDeadlineLabel}</strong>
-                </span>
-              </div>
-              {selectedWeekSummary?.shiftsCount === 0 ? (
-                <p className="text-xs text-amber-700">
-                  יש להוסיף לפחות משמרת אחת לפני פתיחת איסוף אילוצים.
-                </p>
-              ) : null}
-            </div>
+        {/* Compact toolbar: status + all actions in one strip */}
+        <section className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm space-y-2">
+          {/* Top row: status info + all action buttons */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {/* Status badge */}
+            <span
+              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                selectedWeekSummary
+                  ? weekStatusStyle[selectedWeekSummary.status]
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {selectedWeekSummary
+                ? weekStatusLabel[selectedWeekSummary.status]
+                : "לא נבחר שבוע"}
+            </span>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Deadline */}
+            <span className="text-xs text-slate-500">
+              דדליין: <strong className="text-slate-800">{selectedWeekDeadlineLabel}</strong>
+            </span>
+
+            {/* Warning */}
+            {selectedWeekSummary?.shiftsCount === 0 ? (
+              <span className="text-xs text-amber-700">
+                יש להוסיף משמרת לפני פתיחת איסוף.
+              </span>
+            ) : null}
+
+            {/* Spacer pushes buttons right */}
+            <div className="flex-1" />
+
+            {/* All action buttons in one row */}
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setShowCollectionDeadlineModal(true)}
                 disabled={!canOpenCollection || openingCollection}
-                className="h-10 px-4 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 transition-colors"
               >
-                {openingCollection ? "פותח..." : "פתח איסוף אילוצים"}
+                {openingCollection ? "פותח..." : "פתח איסוף"}
               </button>
               <button
                 type="button"
                 onClick={() => void handleOpenCollectionNow()}
                 disabled={!canOpenCollection || openingCollection}
-                className="h-10 px-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100 disabled:opacity-50"
+                className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 transition-colors"
               >
-                קבע דדליין לעכשיו
+                דדליין עכשיו
               </button>
+
+              {selectedWeekSummary?.status === "COLLECTING" && (
+                <button
+                  type="button"
+                  onClick={() => void handleForceLock()}
+                  disabled={forceLocking}
+                  className="h-8 px-3 rounded-lg border border-amber-400 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                >
+                  <Lock className="w-3 h-3" />
+                  {forceLocking ? "נועל..." : "נעל שבוע"}
+                </button>
+              )}
+
+              {selectedWeekSummary && (selectedWeekSummary.status === "LOCKED" ||
+                selectedWeekSummary.status === "SOLVED" ||
+                selectedWeekSummary.status === "PUBLISHED") && (
+                <button
+                  type="button"
+                  onClick={() => void handleSolveWeek()}
+                  disabled={solving || isSolverRunning}
+                  className="h-8 px-3 rounded-lg bg-[#0f7a82] text-white text-xs font-medium hover:bg-[#0a6169] disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                >
+                  {isSolverRunning ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="w-3 h-3" />
+                  )}
+                  {solving ? "מתחיל..." : isSolverRunning ? "מחשב..." : "שיבוץ חכם"}
+                </button>
+              )}
+
+              {selectedWeekSummary && (selectedWeekSummary.status === "SOLVED" ||
+                selectedWeekSummary.status === "PUBLISHED") && (
+                <Link
+                  to="/review"
+                  className="h-8 px-3 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
+                >
+                  <Eye className="w-3 h-3" />
+                  סקירה
+                </Link>
+              )}
             </div>
           </div>
-        </section>
 
-        {/* שיבוץ חכם */}
-        {selectedWeekSummary && (
-          <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-800">שיבוץ חכם</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {selectedWeekSummary.status === "COLLECTING" &&
-                    "ניתן לנעול ידנית לפני הדדליין ולהפעיל שיבוץ חכם."}
-                  {selectedWeekSummary.status === "LOCKED" &&
-                    "השבוע נעול — ניתן להפעיל שיבוץ חכם לחישוב סידור אופטימלי."}
-                  {(selectedWeekSummary.status === "SOLVED" ||
-                    selectedWeekSummary.status === "PUBLISHED") &&
-                    "השיבוץ בוצע — ניתן להפעיל שוב לגרסה חדשה, לסקור ולפרסם."}
-                  {(selectedWeekSummary.status === "DRAFT") &&
-                    "יש לפתוח איסוף אילוצים כדי לאפשר שיבוץ חכם."}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedWeekSummary.status === "COLLECTING" && (
-                  <button
-                    type="button"
-                    onClick={() => void handleForceLock()}
-                    disabled={forceLocking}
-                    className="h-10 px-4 rounded-lg border border-amber-400 bg-amber-50 text-amber-900 text-sm font-medium hover:bg-amber-100 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <Lock className="w-4 h-4" />
-                    {forceLocking ? "נועל..." : "נעל שבוע עכשיו"}
-                  </button>
-                )}
-
-                {(selectedWeekSummary.status === "LOCKED" ||
-                  selectedWeekSummary.status === "SOLVED" ||
-                  selectedWeekSummary.status === "PUBLISHED") && (
-                  <button
-                    type="button"
-                    onClick={() => void handleSolveWeek()}
-                    disabled={solving || isSolverRunning}
-                    className="h-10 px-4 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {isSolverRunning ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {solving ? "מתחיל..." : isSolverRunning ? "מחשב..." : "הפעל שיבוץ חכם"}
-                  </button>
-                )}
-
-                {(selectedWeekSummary.status === "SOLVED" ||
-                  selectedWeekSummary.status === "PUBLISHED") && (
-                  <Link
-                    to="/review"
-                    className="h-10 px-4 rounded-lg border border-sky-300 bg-sky-50 text-sky-900 text-sm font-medium hover:bg-sky-100 flex items-center gap-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                    סקור ופרסם
-                  </Link>
-                )}
-              </div>
+          {/* Solver run status — only shows when active */}
+          {activeSolveRun && (
+            <div
+              className={`rounded-lg px-3 py-2 flex items-center gap-2 text-xs ${
+                activeSolveRun.status === "SUCCEEDED"
+                  ? "bg-green-50 border border-green-200 text-green-800"
+                  : activeSolveRun.status === "FAILED"
+                    ? "bg-red-50 border border-red-200 text-red-800"
+                    : "bg-teal-50 border border-teal-200 text-teal-800"
+              }`}
+            >
+              {(activeSolveRun.status === "QUEUED" || activeSolveRun.status === "RUNNING") && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+              )}
+              {activeSolveRun.status === "SUCCEEDED" && (
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              )}
+              {activeSolveRun.status === "FAILED" && (
+                <XCircle className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span className="flex-1">
+                {activeSolveRun.status === "QUEUED" && "ממתין להפעלה..."}
+                {activeSolveRun.status === "RUNNING" && "מחשב סידור אופטימלי..."}
+                {activeSolveRun.status === "SUCCEEDED" && "השיבוץ הושלם — ניתן לסקור ולפרסם."}
+                {activeSolveRun.status === "FAILED" &&
+                  `נכשל: ${activeSolveRun.errorMessage ?? "שגיאה לא ידועה"}`}
+              </span>
+              {activeSolveRun.status === "SUCCEEDED" && (
+                <Link to="/review" className="font-semibold underline underline-offset-2 shrink-0">
+                  לסקירה
+                </Link>
+              )}
             </div>
-
-            {/* סטטוס שיבוץ */}
-            {activeSolveRun && (
-              <div
-                className={`rounded-xl px-4 py-3 flex items-center gap-3 text-sm ${
-                  activeSolveRun.status === "SUCCEEDED"
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                    : activeSolveRun.status === "FAILED"
-                      ? "bg-red-50 border border-red-200 text-red-800"
-                      : "bg-violet-50 border border-violet-200 text-violet-800"
-                }`}
-              >
-                {activeSolveRun.status === "QUEUED" && (
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                )}
-                {activeSolveRun.status === "RUNNING" && (
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                )}
-                {activeSolveRun.status === "SUCCEEDED" && (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                )}
-                {activeSolveRun.status === "FAILED" && (
-                  <XCircle className="w-4 h-4 shrink-0" />
-                )}
-                <span className="flex-1">
-                  {activeSolveRun.status === "QUEUED" && "השיבוץ בתור — ממתין להפעלה..."}
-                  {activeSolveRun.status === "RUNNING" && "השיבוץ החכם פועל — מחשב סידור אופטימלי..."}
-                  {activeSolveRun.status === "SUCCEEDED" &&
-                    "השיבוץ הושלם בהצלחה! הסידור נוצר — ניתן לסקור ולפרסם."}
-                  {activeSolveRun.status === "FAILED" &&
-                    `השיבוץ נכשל: ${activeSolveRun.errorMessage ?? "שגיאה לא ידועה"}`}
-                </span>
-                {activeSolveRun.status === "SUCCEEDED" && (
-                  <Link
-                    to="/review"
-                    className="font-semibold underline underline-offset-2 shrink-0"
-                  >
-                    לסקירה ←
-                  </Link>
-                )}
-              </div>
-            )}
-          </section>
-        )}
+          )}
+        </section>
 
         <WeekPickerModal
           isOpen={showWeekModal}
