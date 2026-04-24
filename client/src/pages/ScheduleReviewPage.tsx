@@ -177,7 +177,7 @@ function SolverQualityBadge({ solverMeta }: { solverMeta: Record<string, unknown
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
             violations === 0
-              ? "bg-emerald-100 text-emerald-700"
+              ? "bg-[#ebf4fb] text-[#1d5c8b]"
               : violations <= 2
                 ? "bg-amber-100 text-amber-700"
                 : "bg-red-100 text-red-700"
@@ -192,7 +192,7 @@ function SolverQualityBadge({ solverMeta }: { solverMeta: Record<string, unknown
         </span>
       )}
       {isOptimal && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
           <CheckCircle2 className="w-2.5 h-2.5" />
           אופטימלי
         </span>
@@ -471,7 +471,7 @@ export default function ScheduleReviewPage() {
           </div>
           <button
             type="button"
-            className="h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-2 self-start"
+            className="h-10 px-5 rounded-xl bg-[#1d5c8b] text-white text-sm font-semibold hover:bg-[#164e78] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-2 self-start"
             onClick={handlePublish}
             disabled={!selectedVersionId || publishing}
           >
@@ -491,12 +491,12 @@ export default function ScheduleReviewPage() {
           </button>
 
           <div className="flex items-center gap-3 text-sm">
-            <Calendar className="w-4 h-4 text-emerald-600" />
+            <Calendar className="w-4 h-4 text-[#1d5c8b]" />
             <span className="font-semibold text-slate-900">{weekLabel}</span>
             <button
               type="button"
               onClick={() => setWeekStart(startOfWeekSundayIso(getJerusalemTodayIsoDate()))}
-              className="text-xs text-emerald-600 font-medium hover:underline"
+              className="text-xs text-[#1d5c8b] font-medium hover:underline"
             >
               היום
             </button>
@@ -513,16 +513,16 @@ export default function ScheduleReviewPage() {
 
         {/* Published status bar */}
         {publishedVersion ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="rounded-2xl border border-[#1d5c8b]/20 bg-[#ebf4fb] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-[#1d5c8b] flex items-center justify-center shrink-0">
                 <BadgeCheck className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-emerald-900">
+                <p className="text-sm font-semibold text-[#0f2a44]">
                   גרסה #{publishedVersion.versionNumber} פעילה
                 </p>
-                <p className="text-xs text-emerald-700">
+                <p className="text-xs text-[#1d5c8b]">
                   {publishedVersionSummary?.assignmentCount ?? 0} שיבוצים
                   {" · "}
                   פורסמה {formatDateTime(publishedVersion.createdAt)}
@@ -532,7 +532,7 @@ export default function ScheduleReviewPage() {
             <button
               type="button"
               onClick={() => void handleFocusPublishedVersion()}
-              className="h-9 px-4 rounded-lg border border-emerald-300 bg-white text-emerald-800 text-xs font-medium hover:bg-emerald-50 inline-flex items-center gap-1.5 transition-colors"
+              className="h-9 px-4 rounded-lg border border-[#1d5c8b]/30 bg-white text-[#1d5c8b] text-xs font-medium hover:bg-[#ebf4fb] inline-flex items-center gap-1.5 transition-colors"
             >
               <Eye className="w-3.5 h-3.5" />
               הצג
@@ -582,16 +582,16 @@ export default function ScheduleReviewPage() {
                         }}
                         className={`w-full text-right rounded-xl border p-3 transition-all ${
                           isSelected
-                            ? "border-emerald-400 bg-white shadow-md ring-1 ring-emerald-100"
+                            ? "border-[#1d5c8b]/40 bg-white shadow-md ring-1 ring-[#ebf4fb]"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`text-sm font-semibold ${isSelected ? "text-emerald-700" : "text-slate-800"}`}>
+                          <p className={`text-sm font-semibold ${isSelected ? "text-[#1d5c8b]" : "text-slate-800"}`}>
                             #{version.versionNumber}
                           </p>
                           {version.isPublished && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-[#ebf4fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d5c8b]">
                               <BadgeCheck className="w-2.5 h-2.5" />
                               פעילה
                             </span>
@@ -656,7 +656,7 @@ export default function ScheduleReviewPage() {
                             {selectedVersion.assignments.length} שיבוצים
                           </span>
                           {selectedVersion.isPublished && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#ebf4fb] px-2.5 py-1 text-xs font-semibold text-[#1d5c8b]">
                               <BadgeCheck className="w-3.5 h-3.5" />
                               גרסה פעילה
                             </span>
@@ -670,7 +670,7 @@ export default function ScheduleReviewPage() {
                             className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
                             disabled={saving}
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#1d5c8b]" />
                             סיים עריכה
                           </button>
                         ) : (
@@ -759,7 +759,7 @@ export default function ScheduleReviewPage() {
                                           {a.userFullName}
                                         </span>
                                         {a.source === "manual" && (
-                                          <span className="text-[10px] rounded-full bg-violet-100 text-violet-600 px-1.5 py-0.5 font-semibold">
+                                          <span className="text-[10px] rounded-full bg-slate-100 text-slate-600 px-1.5 py-0.5 font-semibold">
                                             ידני
                                           </span>
                                         )}
@@ -900,7 +900,7 @@ export default function ScheduleReviewPage() {
                               <span
                                 className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                                   staff.constraints.length === 0
-                                    ? "bg-emerald-50 text-emerald-600"
+                                    ? "bg-[#ebf4fb] text-[#1d5c8b]"
                                     : "bg-slate-100 text-slate-600"
                                 }`}
                               >

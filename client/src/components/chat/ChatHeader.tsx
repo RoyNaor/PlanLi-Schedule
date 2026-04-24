@@ -1,29 +1,17 @@
 export function ChatHeader() {
   return (
-    <header
-      dir="rtl"
-      className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-l from-emerald-50 via-white to-emerald-100/60 px-6 py-6 shadow-sm"
-    >
-      {/* Glow effect */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_45%)]" />
-
-      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Right side – Identity */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md">
-            🤖
-          </div>
-
-          <div>
-            <h1 className="text-xl font-semibold text-emerald-900">
-              עוזר שיבוצים אישי
-            </h1>
-            <p className="text-sm text-emerald-700">
-              מתזמנים חכם. עובדים רגוע.
-            </p>
-          </div>
-        </div>
+    <div className="bg-[#0f2a44] px-4 py-3 flex items-center gap-3" dir="rtl">
+      {/* Bot avatar */}
+      <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
+        </svg>
       </div>
-    </header>
+
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white leading-tight">עוזר שיבוצים</p>
+        <p className="text-[11px] text-white/50">מוכן לעזור</p>
+      </div>
+    </div>
   );
 }

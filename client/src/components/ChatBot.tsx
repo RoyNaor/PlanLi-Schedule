@@ -127,9 +127,9 @@ export function ChatBot() {
 
   return (
     <main className="chat-shell">
-      <ChatHeader />
-
       <section className="chat-card">
+        <ChatHeader />
+
         <div className="chat-log">
           {messages.length === 0 ? (
             <p className="empty-state">

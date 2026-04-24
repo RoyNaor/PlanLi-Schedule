@@ -225,7 +225,7 @@ export default function UserManagementPage() {
           {!showAddForm && (
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-sm"
+              className="flex items-center justify-center gap-2 bg-[#1d5c8b] text-white px-5 py-3 rounded-xl hover:bg-[#164e78] transition-colors shadow-sm"
             >
               <Plus className="w-5 h-5" />
               הוסף משתמש חדש
@@ -237,7 +237,7 @@ export default function UserManagementPage() {
           <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">סה״כ משתמשים</p>
-              <span className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <span className="w-10 h-10 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
                 <Users className="w-5 h-5" />
               </span>
             </div>
@@ -295,7 +295,7 @@ export default function UserManagementPage() {
                 <input
                   type="text"
                   required
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b]"
                   value={formData.full_name}
                   onChange={(e) =>
                     setFormData({ ...formData, full_name: e.target.value })
@@ -308,7 +308,7 @@ export default function UserManagementPage() {
                 <input
                   type="email"
                   required
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b]"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
@@ -322,7 +322,7 @@ export default function UserManagementPage() {
                   type="password"
                   required
                   minLength={6}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b]"
                   value={formData.password}
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
@@ -333,7 +333,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">תפקיד</label>
                 <select
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b]"
                   value={formData.role}
                   onChange={(e) =>
                     setFormData({ ...formData, role: e.target.value })
@@ -349,7 +349,7 @@ export default function UserManagementPage() {
                 <label className="block text-sm font-medium mb-1">טלפון</label>
                 <input
                   type="tel"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b]"
                   value={formData.phone}
                   onChange={(e) =>
                     setFormData({ ...formData, phone: e.target.value })
@@ -367,7 +367,7 @@ export default function UserManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+                  className="px-5 py-2 bg-[#1d5c8b] text-white rounded-xl hover:bg-[#164e78]"
                 >
                   שמור משתמש
                 </button>
@@ -386,7 +386,7 @@ export default function UserManagementPage() {
                   placeholder="חיפוש לפי שם, אימייל, טלפון או מזהה"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
                 />
               </div>
 
@@ -394,7 +394,7 @@ export default function UserManagementPage() {
                 <select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
-                  className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500"
+                  className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
                 >
                   <option value="all">כל התפקידים</option>
                   <option value="admin">מנהלים</option>
@@ -455,7 +455,7 @@ export default function UserManagementPage() {
                       className="hover:bg-slate-50 transition-colors"
                     >
                       <td className="px-6 py-4 font-medium flex items-center gap-3">
-                        <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                        <div className="w-8 h-8 bg-[#ebf4fb] text-[#1d5c8b] rounded-full flex items-center justify-center">
                           <UserIcon className="w-4 h-4" />
                         </div>
                         {u.full_name}
@@ -505,7 +505,7 @@ export default function UserManagementPage() {
                 <article key={u.id} className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 bg-[#ebf4fb] text-[#1d5c8b] rounded-full flex items-center justify-center shrink-0">
                         <UserIcon className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
@@ -553,8 +553,8 @@ export default function UserManagementPage() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="mx-auto w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
-              <Check className="w-10 h-10 text-emerald-600" />
+            <div className="mx-auto w-20 h-20 rounded-full bg-[#ebf4fb] flex items-center justify-center animate-pulse">
+              <Check className="w-10 h-10 text-[#1d5c8b]" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mt-4">
               המשתמש נוסף בהצלחה
@@ -562,7 +562,7 @@ export default function UserManagementPage() {
             <p className="text-slate-500 mt-2">משתמש חדש נוצר ונשמר במערכת.</p>
             <button
               onClick={() => setShowSuccessModal(false)}
-              className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl"
+              className="mt-6 w-full bg-[#1d5c8b] hover:bg-[#164e78] text-white py-2 rounded-xl"
             >
               סגור
             </button>
@@ -638,7 +638,7 @@ export default function UserManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white"
+                  className="px-4 py-2 rounded-xl bg-[#1d5c8b] text-white"
                 >
                   שמור שינויים
                 </button>
