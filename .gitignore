@@ -23,6 +23,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Agent-local files
+.agent/
+
+# Repo-local git hooks
+.githooks/
+
 # Firebase service account
 firebase-service-account.json
 
