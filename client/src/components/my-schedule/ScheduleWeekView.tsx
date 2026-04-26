@@ -2,7 +2,12 @@ import { clsx } from "clsx";
 import type { KeyboardEvent } from "react";
 import { parseIsoDateToUtc } from "../../utils/date.utils";
 import { dayNumberFormatter, WEEK_DAY_LABELS } from "./formatters";
-import { navFlashFocus, navFlashOn } from "./scheduleNavFlash";
+import {
+  navFlashColumnHoverTransition,
+  navFlashFocus,
+  navFlashFrameOverlayClass,
+  navFlashTargetLift,
+} from "./scheduleNavFlash";
 import { ScheduleShiftCard } from "./ShiftCard";
 import type { ScheduleAssignment } from "./types";
 
@@ -38,7 +43,7 @@ export function ScheduleWeekView({
   highlightKey,
 }: Props) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <div className="overflow-x-visible overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto p-0.5">
         {loading ? (
           <>
@@ -82,18 +87,28 @@ export function ScheduleWeekView({
               const list = assignmentsByDate.get(isoDate) ?? [];
               const dayKey = `day:${isoDate}`;
               const h = () => onSelectDay(isoDate);
+              const isFlash = highlightKey === dayKey;
               return (
                 <div
                   key={isoDate}
                   {...columnA11y(h)}
                   className={clsx(
-                    "group flex h-full min-h-0 flex-col border-l border-slate-200 last:border-l-0 text-center bg-white",
-                    "cursor-pointer transition-colors duration-150",
-                    navFlashOn(highlightKey === dayKey),
+                    "group relative z-0 flex h-full min-h-0 flex-col border-l border-slate-200 last:border-l-0 text-center bg-white",
+                    "cursor-pointer",
+                    navFlashColumnHoverTransition,
+                    isFlash && navFlashTargetLift,
                     navFlashFocus,
                   )}
                 >
-                  <div className="py-3 border-b border-slate-200 bg-slate-50/80 transition-colors duration-150 group-hover:bg-slate-100/85">
+                  {isFlash && (
+                    <div className={navFlashFrameOverlayClass} aria-hidden />
+                  )}
+                  <div
+                    className={clsx(
+                      "py-3 border-b border-slate-200 bg-slate-50/80 group-hover:bg-slate-100/85",
+                      navFlashColumnHoverTransition,
+                    )}
+                  >
                     <p className="text-xs font-medium text-slate-500 mb-1">
                       יום {WEEK_DAY_LABELS[index]}
                     </p>
@@ -108,7 +123,12 @@ export function ScheduleWeekView({
                       </span>
                     </div>
                   </div>
-                  <div className="flex min-h-[200px] flex-1 flex-col gap-1.5 p-2 transition-colors duration-150 group-hover:bg-slate-50/70">
+                  <div
+                    className={clsx(
+                      "flex min-h-[200px] flex-1 flex-col gap-1.5 p-2 group-hover:bg-slate-50/70",
+                      navFlashColumnHoverTransition,
+                    )}
+                  >
                     {list.length === 0 ? (
                       <div className="flex-1" />
                     ) : (

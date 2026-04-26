@@ -15,10 +15,10 @@ import {
 } from "../utils/date.utils";
 import { chunkArray, countAssignments, FETCH_BATCH, mergeAssignmentsByDate } from "../components/my-schedule/scheduleData";
 import { fullDateFormatter, monthYearFormatter, yearLabelFormatter, WEEK_DAY_LABELS } from "../components/my-schedule/formatters";
+import { NAV_FLASH_MS } from "../components/my-schedule/scheduleNavFlash";
 import type { ScheduleResponse, ViewMode, WeekCache } from "../components/my-schedule/types";
 
 const API_BASE = "http://localhost:3000/api";
-const NAV_FLASH_MS = 200;
 
 function addYearsToIsoDate(iso: string, years: number) {
   return addMonthsToIsoDate(iso, years * 12);

@@ -2,7 +2,12 @@ import { clsx } from "clsx";
 import type { MonthMatrixCell } from "../../utils/date.utils";
 import { parseIsoDateToUtc } from "../../utils/date.utils";
 import { dayNumberFormatter, WEEK_DAY_LABELS } from "./formatters";
-import { navFlashFocus, navFlashOn } from "./scheduleNavFlash";
+import {
+  navFlashFocus,
+  navFlashFrameOverlayClass,
+  navFlashOn,
+  navFlashTargetLift,
+} from "./scheduleNavFlash";
 import { ScheduleShiftCard } from "./ShiftCard";
 import type { ScheduleAssignment } from "./types";
 
@@ -44,61 +49,63 @@ export function ScheduleMonthView({
           {monthRows.map((row, ri) => {
             const weekStart = row[0]?.weekStart ?? "";
             const weekKey = `week:${weekStart}`;
+            const isWeekFlash = highlightKey === weekKey;
             return (
               <div
                 key={ri}
-                onClick={() => weekStart && onSelectWeek(weekStart)}
-                className={clsx(
-                  "grid grid-cols-7 min-h-[88px] border-b border-slate-200 last:border-b-0 cursor-pointer",
-                  "hover:bg-slate-50/50",
-                  navFlashOn(highlightKey === weekKey),
-                )}
-                style={{ minWidth: "640px" }}
+                className={clsx("relative w-full", isWeekFlash && navFlashTargetLift)}
               >
-                {row.map((cell) => {
-                  const isToday = cell.iso === todayIso;
-                  const list = assignmentsByDate.get(cell.iso) ?? [];
-                  const dayKey = `day:${cell.iso}`;
-                  return (
-                    <div
-                      key={cell.iso}
-                      className={clsx(
-                        "border-l border-slate-200 last:border-l-0 p-1.5 flex flex-col gap-1",
-                        isToday && "bg-blue-50/40",
-                        !cell.inMonth && "bg-slate-50/50 opacity-60",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectDay(cell.iso);
-                        }}
+                {isWeekFlash && <div className={navFlashFrameOverlayClass} aria-hidden />}
+                <div
+                  onClick={() => weekStart && onSelectWeek(weekStart)}
+                  className="relative z-0 grid min-h-[88px] cursor-pointer grid-cols-7 border-b border-slate-200 last:border-b-0 hover:bg-slate-50/50"
+                  style={{ minWidth: "640px" }}
+                >
+                  {row.map((cell) => {
+                    const isToday = cell.iso === todayIso;
+                    const list = assignmentsByDate.get(cell.iso) ?? [];
+                    const dayKey = `day:${cell.iso}`;
+                    return (
+                      <div
+                        key={cell.iso}
                         className={clsx(
-                          "text-center text-xs font-semibold w-6 h-6 rounded-full flex items-center justify-center self-center",
-                          isToday && "bg-[#1d5c8b] text-white",
-                          !isToday && cell.inMonth && "text-slate-800",
-                          navFlashOn(highlightKey === dayKey),
-                          navFlashFocus,
+                          "border-l border-slate-200 last:border-l-0 p-1.5 flex flex-col gap-1",
+                          isToday && "bg-blue-50/40",
+                          !cell.inMonth && "bg-slate-50/50 opacity-60",
                         )}
                       >
-                        {dayNumberFormatter.format(parseIsoDateToUtc(cell.iso))}
-                      </button>
-                      {list.map((a) => (
-                        <div
-                          key={`${a.shiftId}-${a.userId}-${cell.iso}`}
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectDay(cell.iso);
                           }}
-                          className="cursor-pointer"
+                          className={clsx(
+                            "text-center text-xs font-semibold w-6 h-6 rounded-full flex items-center justify-center self-center",
+                            isToday && "bg-[#1d5c8b] text-white",
+                            !isToday && cell.inMonth && "text-slate-800",
+                            navFlashOn(highlightKey === dayKey),
+                            navFlashFocus,
+                          )}
                         >
-                          <ScheduleShiftCard a={a} />
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
+                          {dayNumberFormatter.format(parseIsoDateToUtc(cell.iso))}
+                        </button>
+                        {list.map((a) => (
+                          <div
+                            key={`${a.shiftId}-${a.userId}-${cell.iso}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectDay(cell.iso);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <ScheduleShiftCard a={a} />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
