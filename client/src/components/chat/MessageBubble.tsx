@@ -1,3 +1,4 @@
+import { Bot, UserRound } from "lucide-react";
 import type { ChatMessage } from "../types";
 
 interface MessageBubbleProps {
@@ -29,7 +30,7 @@ function formatMessageTime(createdAt?: string) {
 function BotAvatar() {
   return (
     <div className="w-8 h-8 rounded-full bg-[#0f2a44] flex items-center justify-center flex-shrink-0 shadow-sm">
-      <span className="text-[9px] font-bold text-white tracking-tight">PL</span>
+      <Bot className="w-4 h-4 text-white" aria-hidden="true" />
     </div>
   );
 }
@@ -37,7 +38,7 @@ function BotAvatar() {
 function UserAvatar() {
   return (
     <div className="w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
-      <span className="text-[10px] font-medium text-slate-600">את/ה</span>
+      <UserRound className="w-4 h-4 text-slate-600" aria-hidden="true" />
     </div>
   );
 }
@@ -45,7 +46,7 @@ function UserAvatar() {
 export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
   if (typing) {
     return (
-      <div className="flex justify-start items-end gap-2 mb-3">
+      <div className="flex justify-start items-center gap-2 mb-3">
         <BotAvatar />
         <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm max-w-[75%]">
           <div className="typing-indicator">
@@ -65,7 +66,7 @@ export function MessageBubble({ message, typing = false }: MessageBubbleProps) {
   const time = formatMessageTime(message.created_at);
 
   return (
-    <div className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : ""} mb-3`}>
+    <div className={`flex items-center gap-2 ${isUser ? "flex-row-reverse" : ""} mb-3`}>
       {isUser ? <UserAvatar /> : <BotAvatar />}
 
       <div className={`max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
