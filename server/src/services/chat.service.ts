@@ -2,10 +2,18 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { queryDatabase } from "./database.service.js";
 import {
+  ScheduleService,
+  type PublishedScheduleView,
+  type ScheduleAssignmentView,
+} from "./schedule.service.js";
+import {
   formatIsraelNowIso,
   formatTranscript,
   getWeekStartSundayInIsrael,
+  getLocalChatReply,
+  ISRAEL_TIME_ZONE,
   isConversationClosingMessage,
+  resolveScheduleQueryWeekStart,
   Sender,
   toIsraelDateParts,
   TranscriptMessage,
@@ -64,6 +72,47 @@ const intentResponseSchema = z.object({
 
 type IntentResponse = z.infer<typeof intentResponseSchema>;
 
+const scheduleDateFormatter = new Intl.DateTimeFormat("he-IL", {
+  timeZone: ISRAEL_TIME_ZONE,
+  weekday: "long",
+  day: "2-digit",
+  month: "2-digit",
+});
+
+function formatScheduleDate(isoDate: string): string {
+  return scheduleDateFormatter.format(new Date(`${isoDate}T12:00:00.000Z`));
+}
+
+function formatScheduleTime(time: string): string {
+  const [hours, minutes] = time.split(":");
+  return hours && minutes ? `${hours}:${minutes}` : time;
+}
+
+function formatScheduleAssignment(assignment: ScheduleAssignmentView): string {
+  const startTime = formatScheduleTime(assignment.startTime);
+  const endTime = formatScheduleTime(assignment.endTime);
+  const overnightNote = assignment.endTime <= assignment.startTime ? " (מסתיים למחרת)" : "";
+  return `• ${formatScheduleDate(assignment.shiftDate)}: ${startTime}-${endTime}${overnightNote}`;
+}
+
+function buildPublishedScheduleReply(
+  schedule: PublishedScheduleView | null,
+  weekStart: string,
+): string {
+  const weekLabel = formatScheduleDate(weekStart);
+
+  if (!schedule) {
+    return `עוד לא פורסם סידור לשבוע שמתחיל ב-${weekLabel}. אפשר לבדוק שוב אחרי שהמנהל מפרסם את הסידור 📅`;
+  }
+
+  if (schedule.assignments.length === 0) {
+    return `הסידור לשבוע שמתחיל ב-${weekLabel} פורסם, ואין לך משמרות בשבוע הזה.`;
+  }
+
+  const assignmentLines = schedule.assignments.map(formatScheduleAssignment).join("\n");
+  return `אלה השיבוצים שלך לשבוע שמתחיל ב-${weekLabel}:\n${assignmentLines}\nצריך עוד משהו?`;
+}
+
 const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) עבור צ'אטבוט תזמון רפואי. תמיד תחזיר תשובה בעברית בלבד.
 
 החזר STRICT JSON בלבד. בלי markdown, בלי טקסט מחוץ ל-JSON, ובלי שדות נוספים.
@@ -96,11 +145,13 @@ const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) ע�
 
 3) general
    - השב בקצרה ובידידותיות בהקשר תזמון רפואי.
+   - אם המשתמש מברך, מבקש עזרה, או לא ברור לו מה אפשר לעשות, הצע 2-3 דוגמאות שימושיות כמו בדיקת שיבוצים או הוספת אילוץ.
+   - אם הפקודה לא ברורה אבל יכולה להיות קשורה לשיבוצים, אמור "לא בטוח שהבנתי" ובקש ניסוח עם יום/שעה.
 
 4) out_of_scope
    - כל בקשה שלא קשורה לתזמון רפואי וזמינות.
    - אל תענה על הבקשה עצמה.
-   - הסבר בנימוס שאתה יכול לעזור רק בתזמון/זמינות.
+   - הסבר בנימוס שאתה יכול לעזור רק בתזמון/זמינות, והצע דוגמאות קונקרטיות כמו "מה השיבוצים שלי לשבוע הקרוב?" או "אל תשבץ אותי ביום ראשון בערב".
    - constraints חייב להיות [].
 
 דוגמאות JSON:
@@ -108,8 +159,8 @@ const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) ע�
 {"intent":"constraint","confidence":0.84,"assistant_reply":"תודה 🙌 חסמתי את שני חלונות הזמן שביקשת. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"חופשת מחלה"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"מעדיף זמן משפחה"}]}
 {"intent":"constraint","confidence":0.35,"assistant_reply":"אשמח להוסיף, אבל מה השעות המדויקות לחסימה ביום שלישי? ⏰ צריך עוד משהו?","constraints":[]}
 {"intent":"schedule_query","confidence":0.88,"assistant_reply":"בשמחה 📅 רוצה שאבדוק את השבוע הזה או השבוע הבא?","constraints":[]}
-{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור עם המשמרות שלך. מה תרצה לקבוע?","constraints":[]}
-{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"אני יכול לעזור רק בנושאי תזמון וזמינות 🩺📆 אפשר לרשום אילוץ או לבדוק משמרות. צריך עוד משהו?","constraints":[]}`;
+{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור לבדוק שיבוצים או להוסיף אילוצי זמינות. אפשר לכתוב למשל: \"מה השיבוצים שלי לשבוע הקרוב?\" או \"אל תשבץ אותי ביום ראשון בערב\".","constraints":[]}
+{"intent":"out_of_scope","confidence":0.99,"assistant_reply":"אני כאן בעיקר לשיבוצים וזמינות 🩺📆 אפשר לכתוב \"מה השיבוצים שלי לשבוע הקרוב?\" או \"אני לא יכול/ה ביום שלישי בערב\".","constraints":[]}`;
 
 export const ChatService = {
   // Persists a user message, asks the model for intent, stores constraints, and saves reply.
@@ -121,6 +172,27 @@ export const ChatService = {
       return {
         conversationId,
         assistantText: "בכיף 😊 שמחתי לעזור. אם תרצה לעדכן זמינות נוספת, אני כאן.",
+      };
+    }
+
+    const localReply = getLocalChatReply(message);
+    if (localReply) {
+      return {
+        conversationId,
+        assistantText: localReply,
+      };
+    }
+
+    const scheduleWeekStart = resolveScheduleQueryWeekStart(message);
+    if (scheduleWeekStart) {
+      const schedule = await ScheduleService.getPublishedScheduleForUser({
+        weekStart: scheduleWeekStart,
+        userId,
+      });
+
+      return {
+        conversationId,
+        assistantText: buildPublishedScheduleReply(schedule, scheduleWeekStart),
       };
     }
 
