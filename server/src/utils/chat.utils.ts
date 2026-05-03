@@ -7,6 +7,109 @@ export interface TranscriptMessage {
   content: string;
 }
 
+export type ScheduleQueryRange = "current" | "next";
+
+const LOCAL_CHAT_HELP_REPLY = `היי 😊 אני כאן כדי לעזור עם השיבוצים והזמינות שלך.
+אפשר לכתוב למשל:
+• מה השיבוצים שלי לשבוע הקרוב?
+• אל תשבץ אותי ביום ראשון בערב
+• אני לא יכול/ה לעבוד ביום שלישי בין 10:00 ל-14:00
+• אם אפשר, אל תשבץ אותי במשמרת לילה השבוע`;
+
+const UNKNOWN_CHAT_REPLY = `לא בטוח שהבנתי למה התכוונת 🙂 אני יכול לעזור עם שיבוצים, זמינות ואילוצים.
+אפשר למשל לכתוב:
+• מה השיבוצים שלי לשבוע הקרוב?
+• אל תשבץ אותי בימים שני ורביעי
+• יש לי חופשה בתאריך 12.5`;
+
+const greetingPatterns = [
+  "היי",
+  "הי",
+  "שלום",
+  "אהלן",
+  "בוקר טוב",
+  "ערב טוב",
+  "hi",
+  "hello",
+];
+
+const helpPatterns = [
+  "עזרה",
+  "אפשר עזרה",
+  "מה אפשר לעשות",
+  "מה אתה יודע לעשות",
+  "מה ניתן לעשות",
+  "פקודות",
+  "אפשרויות",
+];
+
+const schedulingSignals = [
+  "אילוץ",
+  "אילוצים",
+  "אסור",
+  "בוקר",
+  "בערב",
+  "בשבוע",
+  "בתאריך",
+  "היום",
+  "השבוע",
+  "זמין",
+  "זמינה",
+  "חופש",
+  "חופשה",
+  "יכולה",
+  "יכול",
+  "לילה",
+  "לעבוד",
+  "מחר",
+  "מחלה",
+  "משמר",
+  "סידור",
+  "עדיף",
+  "פנוי",
+  "פנויה",
+  "צהר",
+  "רביעי",
+  "ראשון",
+  "רופא",
+  "שבת",
+  "שבוע",
+  "שישי",
+  "שיבוצ",
+  "שני",
+  "שלישי",
+  "שעה",
+  "תור",
+  "תאריך",
+  "חמישי",
+];
+
+const scheduleQueryPatterns = [
+  "השיבוצים שלי",
+  "השיבוץ שלי",
+  "הסידור שלי",
+  "המשמרות שלי",
+  "שיבוצים שלי",
+  "שיבוץ שלי",
+  "סידור שלי",
+  "משמרות שלי",
+];
+
+function normalizeChatText(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\u200e\u200f]/g, "")
+    .replace(/[.!?,;:"'`~*_()[\]{}<>]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 // Extracts Israel-local calendar parts from a Date for deterministic date math.
 export function toIsraelDateParts(input: Date): { year: number; month: number; day: number; weekday: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -88,6 +191,60 @@ export function formatTranscript(messages: TranscriptMessage[]): string {
       return `${role}: ${message.content}`;
     })
     .join("\n");
+}
+
+export function getLocalChatReply(input: string): string | null {
+  const normalized = normalizeChatText(input);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    greetingPatterns.some((pattern) => normalized === pattern) ||
+    helpPatterns.some((pattern) => normalized === pattern || normalized.includes(pattern))
+  ) {
+    return LOCAL_CHAT_HELP_REPLY;
+  }
+
+  if (detectScheduleQueryRange(input)) {
+    return null;
+  }
+
+  if (!schedulingSignals.some((signal) => normalized.includes(signal))) {
+    return UNKNOWN_CHAT_REPLY;
+  }
+
+  return null;
+}
+
+export function detectScheduleQueryRange(input: string): ScheduleQueryRange | null {
+  const normalized = normalizeChatText(input);
+
+  const asksForSchedule = scheduleQueryPatterns.some((pattern) => normalized.includes(pattern));
+  if (!asksForSchedule) {
+    return null;
+  }
+
+  if (
+    normalized.includes("שבוע הבא") ||
+    normalized.includes("השבוע הבא") ||
+    normalized.includes("לשבוע הבא")
+  ) {
+    return "next";
+  }
+
+  return "current";
+}
+
+export function resolveScheduleQueryWeekStart(input: string, now: Date = new Date()): string | null {
+  const range = detectScheduleQueryRange(input);
+  if (!range) {
+    return null;
+  }
+
+  const currentWeekStart = getWeekStartSundayInIsrael(now);
+  return range === "next" ? addDaysToIsoDate(currentWeekStart, 7) : currentWeekStart;
 }
 
 // Detects short gratitude/closing messages so the bot can end politely without re-processing constraints.
