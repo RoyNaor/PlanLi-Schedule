@@ -10,8 +10,6 @@ import {
   AlertTriangle,
   Users,
   Send,
-  Stethoscope,
-  UserRoundPlus,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -24,6 +22,13 @@ import {
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
 import {
+  getRoleIcon,
+  getRoleLabel,
+  getRolePluralLabel,
+  isStaffRole,
+  staffRoleOptions,
+} from "../utils/staffing";
+import {
   addDaysToIsoDate,
   getJerusalemTodayIsoDate,
   parseIsoDateToUtc,
@@ -33,15 +38,17 @@ import {
 const API_BASE = "http://localhost:3000/api";
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 
-const roleLabels: Record<string, string> = {
-  doctor: "רופא",
-  nurse: "אחות",
-  admin: "מנהל",
-};
-
 function hebrewRole(role: string) {
-  return roleLabels[role] ?? role;
+  return getRoleLabel(role);
 }
+
+function hebrewRoleCount(role: string, count: number) {
+  return count === 1 ? getRoleLabel(role) : getRolePluralLabel(role);
+}
+
+const staffRoleOrder = new Map<string, number>(
+  staffRoleOptions.map((role, index) => [role.value, index]),
+);
 
 interface ScheduleVersionSummary {
   id: string;
@@ -293,9 +300,7 @@ export default function ScheduleReviewPage() {
       const response = await axios.get<StaffMember[]>(`${API_BASE}/users`, {
         headers: authHeaders,
       });
-      setAllStaff(
-        response.data.filter((u) => u.role === "doctor" || u.role === "nurse"),
-      );
+      setAllStaff(response.data.filter((u) => isStaffRole(u.role)));
     } catch {
       // non-critical, just won't show add dropdown
     }
@@ -447,15 +452,22 @@ export default function ScheduleReviewPage() {
       map.get(a.shiftId)!.push(a);
     }
     return Array.from(map.entries()).map(([shiftId, assignments]) => {
-      const doctors = assignments.filter((a) => a.userRole === "doctor");
-      const nurses = assignments.filter((a) => a.userRole === "nurse");
+      const orderedAssignments = [...assignments].sort(
+        (a, b) =>
+          (staffRoleOrder.get(a.userRole) ?? 999) - (staffRoleOrder.get(b.userRole) ?? 999) ||
+          a.userFullName.localeCompare(b.userFullName),
+      );
+      const roleCounts = orderedAssignments.reduce<Record<string, number>>((acc, assignment) => {
+        acc[assignment.userRole] = (acc[assignment.userRole] ?? 0) + 1;
+        return acc;
+      }, {});
       return {
         shiftId,
         shiftDate: assignments[0].shiftDate,
         startTime: assignments[0].startTime,
         endTime: assignments[0].endTime,
-        doctors,
-        nurses,
+        assignments: orderedAssignments,
+        roleCounts,
         total: assignments.length,
         assignedUserIds: new Set(assignments.map((a) => a.userId)),
       };
@@ -698,75 +710,63 @@ export default function ScheduleReviewPage() {
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
-                                    <span className="inline-flex items-center gap-1">
-                                      <Stethoscope className="w-3 h-3" />
-                                      {group.doctors.length} רופאים
-                                    </span>
-                                    <span className="inline-flex items-center gap-1">
-                                      <UserRoundPlus className="w-3 h-3" />
-                                      {group.nurses.length} אחיות
-                                    </span>
+                                    {Object.entries(group.roleCounts).map(([role, count]) => {
+                                      const Icon = getRoleIcon(role);
+                                      return (
+                                        <span key={role} className="inline-flex items-center gap-1">
+                                          <Icon className="w-3 h-3" />
+                                          {count} {hebrewRoleCount(role, count)}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </div>
 
                                 {/* Staff rows */}
                                 <div className="divide-y divide-slate-100">
-                                  {[...group.doctors, ...group.nurses].map((a) => (
-                                    <div
-                                      key={`${a.shiftId}-${a.userId}`}
-                                      className="px-4 py-2.5 flex items-center justify-between"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <div
-                                          className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                                            a.userRole === "doctor"
-                                              ? "bg-blue-100"
-                                              : "bg-pink-100"
-                                          }`}
-                                        >
-                                          {a.userRole === "doctor" ? (
-                                            <Stethoscope className="w-3 h-3 text-blue-600" />
-                                          ) : (
-                                            <UserRoundPlus className="w-3 h-3 text-pink-600" />
+                                  {group.assignments.map((a) => {
+                                    const Icon = getRoleIcon(a.userRole);
+                                    return (
+                                      <div
+                                        key={`${a.shiftId}-${a.userId}`}
+                                        className="px-4 py-2.5 flex items-center justify-between"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-6 h-6 rounded-full bg-[#ebf4fb] flex items-center justify-center">
+                                            <Icon className="w-3 h-3 text-[#1d5c8b]" />
+                                          </div>
+                                          <span className="text-sm font-medium text-slate-800">
+                                            {a.userFullName}
+                                          </span>
+                                          {a.source === "manual" && (
+                                            <span className="text-[10px] rounded-full bg-slate-100 text-slate-600 px-1.5 py-0.5 font-semibold">
+                                              ידני
+                                            </span>
                                           )}
                                         </div>
-                                        <span className="text-sm font-medium text-slate-800">
-                                          {a.userFullName}
-                                        </span>
-                                        {a.source === "manual" && (
-                                          <span className="text-[10px] rounded-full bg-slate-100 text-slate-600 px-1.5 py-0.5 font-semibold">
-                                            ידני
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] font-semibold text-[#1d5c8b]">
+                                            {hebrewRole(a.userRole)}
                                           </span>
-                                        )}
+                                          {editMode && (
+                                            <button
+                                              type="button"
+                                              onClick={() => void handleRemoveAssignment(a.shiftId, a.userId)}
+                                              disabled={saving}
+                                              className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors disabled:opacity-50"
+                                              title="הסר שיבוץ"
+                                            >
+                                              {saving ? (
+                                                <LoadingSpinner className="w-3 h-3 text-red-600" />
+                                              ) : (
+                                                <X className="w-3 h-3 text-red-600" />
+                                              )}
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <span
-                                          className={`text-[11px] font-semibold ${
-                                            a.userRole === "doctor"
-                                              ? "text-blue-600"
-                                              : "text-pink-600"
-                                          }`}
-                                        >
-                                          {hebrewRole(a.userRole)}
-                                        </span>
-                                        {editMode && (
-                                          <button
-                                            type="button"
-                                            onClick={() => void handleRemoveAssignment(a.shiftId, a.userId)}
-                                            disabled={saving}
-                                            className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors disabled:opacity-50"
-                                            title="הסר שיבוץ"
-                                          >
-                                            {saving ? (
-                                              <LoadingSpinner className="w-3 h-3 text-red-600" />
-                                            ) : (
-                                              <X className="w-3 h-3 text-red-600" />
-                                            )}
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
 
                                 {/* Add employee row (edit mode only) */}
@@ -784,20 +784,11 @@ export default function ScheduleReviewPage() {
                                       disabled={saving}
                                     >
                                       <option value="">בחר עובד להוספה...</option>
-                                      {availableStaff
-                                        .filter((s) => s.role === "doctor")
-                                        .map((s) => (
-                                          <option key={s.id} value={s.id}>
-                                            {s.full_name} (רופא)
-                                          </option>
-                                        ))}
-                                      {availableStaff
-                                        .filter((s) => s.role === "nurse")
-                                        .map((s) => (
-                                          <option key={s.id} value={s.id}>
-                                            {s.full_name} (אחות)
-                                          </option>
-                                        ))}
+                                      {availableStaff.map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                          {s.full_name} ({hebrewRole(s.role)})
+                                        </option>
+                                      ))}
                                     </select>
                                     <button
                                       type="button"
@@ -846,7 +837,9 @@ export default function ScheduleReviewPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {constraintsSummary.map((staff) => (
+                      {constraintsSummary.map((staff) => {
+                        const Icon = getRoleIcon(staff.role);
+                        return (
                         <div
                           key={staff.userId}
                           className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
@@ -854,16 +847,8 @@ export default function ScheduleReviewPage() {
                           {/* Staff header */}
                           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                  staff.role === "doctor" ? "bg-blue-100" : "bg-pink-100"
-                                }`}
-                              >
-                                {staff.role === "doctor" ? (
-                                  <Stethoscope className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <UserRoundPlus className="w-4 h-4 text-pink-600" />
-                                )}
+                              <div className="w-8 h-8 rounded-full bg-[#ebf4fb] flex items-center justify-center">
+                                <Icon className="w-4 h-4 text-[#1d5c8b]" />
                               </div>
                               <div>
                                 <p className="text-sm font-semibold text-slate-800">
@@ -873,13 +858,7 @@ export default function ScheduleReviewPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span
-                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                                  staff.role === "doctor"
-                                    ? "bg-blue-50 text-blue-600"
-                                    : "bg-pink-50 text-pink-600"
-                                }`}
-                              >
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#ebf4fb] text-[#1d5c8b]">
                                 {hebrewRole(staff.role)}
                               </span>
                               <span
@@ -949,7 +928,8 @@ export default function ScheduleReviewPage() {
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -27,5 +27,12 @@ export type Shift = {
   endTime: string;
   minDoctors: number;
   minNurses: number;
+  minMidwives: number;
+  minObgyns: number;
+  minAnesthesiologists: number;
+  minOrderlies: number;
+  minPediatricians: number;
+  minShabbatScribes: number;
+  minSecretaries: number;
   createdAt: string;
 };

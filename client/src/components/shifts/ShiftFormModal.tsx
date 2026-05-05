@@ -1,6 +1,11 @@
-import { CalendarDays, Clock, Moon, Stethoscope, UserRoundPlus, X } from "lucide-react";
+import { CalendarDays, Clock, Moon, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { normalizeApiTimeToHourMinute } from "../../utils/date.utils";
+import {
+  getDefaultStaffingValues,
+  staffingFields,
+  type StaffingField,
+} from "../../utils/staffing";
 import type { Shift } from "../types";
 import { LoadingSpinner } from "../ui/LoadingIndicator";
 
@@ -8,9 +13,7 @@ type ShiftFormValues = {
   shiftDate: string;
   startTime: string;
   endTime: string;
-  minDoctors: number;
-  minNurses: number;
-};
+} & Record<StaffingField, number>;
 
 type Props = {
   isOpen: boolean;
@@ -24,12 +27,12 @@ type Props = {
 
 function toFormValues(shiftDate: string, shiftToEdit: Shift | null): ShiftFormValues {
   if (!shiftToEdit) {
+    const startTime = "08:00";
     return {
       shiftDate,
-      startTime: "08:00",
+      startTime,
       endTime: "16:00",
-      minDoctors: 1,
-      minNurses: 1,
+      ...getDefaultStaffingValues(shiftDate, startTime),
     };
   }
 
@@ -39,6 +42,13 @@ function toFormValues(shiftDate: string, shiftToEdit: Shift | null): ShiftFormVa
     endTime: normalizeApiTimeToHourMinute(shiftToEdit.endTime) || "16:00",
     minDoctors: shiftToEdit.minDoctors,
     minNurses: shiftToEdit.minNurses,
+    minMidwives: shiftToEdit.minMidwives,
+    minObgyns: shiftToEdit.minObgyns,
+    minAnesthesiologists: shiftToEdit.minAnesthesiologists,
+    minOrderlies: shiftToEdit.minOrderlies,
+    minPediatricians: shiftToEdit.minPediatricians,
+    minShabbatScribes: shiftToEdit.minShabbatScribes,
+    minSecretaries: shiftToEdit.minSecretaries,
   };
 }
 
@@ -77,7 +87,7 @@ export default function ShiftFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4">
-      <section dir="rtl" className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <section dir="rtl" className="w-full max-w-2xl max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-[#0f2a44] px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">{title}</h2>
@@ -91,7 +101,7 @@ export default function ShiftFormModal({
         </div>
 
         <form
-          className="p-6 space-y-5"
+          className="p-6 space-y-5 overflow-y-auto"
           onSubmit={async (event) => {
             event.preventDefault();
             try {
@@ -125,9 +135,16 @@ export default function ShiftFormModal({
               <input
                 type="date"
                 value={values.shiftDate}
-                onChange={(event) =>
-                  setValues((prev) => ({ ...prev, shiftDate: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextShiftDate = event.target.value;
+                  setValues((prev) => ({
+                    ...prev,
+                    shiftDate: nextShiftDate,
+                    ...(mode === "create"
+                      ? getDefaultStaffingValues(nextShiftDate, prev.startTime)
+                      : {}),
+                  }));
+                }}
                 required
                 className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
@@ -144,9 +161,16 @@ export default function ShiftFormModal({
               <input
                 type="time"
                 value={values.startTime}
-                onChange={(event) =>
-                  setValues((prev) => ({ ...prev, startTime: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextStartTime = event.target.value;
+                  setValues((prev) => ({
+                    ...prev,
+                    startTime: nextStartTime,
+                    ...(mode === "create"
+                      ? getDefaultStaffingValues(prev.shiftDate, nextStartTime)
+                      : {}),
+                  }));
+                }}
                 required
                 className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
               />
@@ -189,46 +213,28 @@ export default function ShiftFormModal({
           )}
 
           {/* Staff fields */}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                <Stethoscope className="w-3.5 h-3.5" />
-                מינימום רופאים
-              </span>
-              <input
-                type="number"
-                min={0}
-                value={values.minDoctors}
-                onChange={(event) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    minDoctors: Number(event.target.value),
-                  }))
-                }
-                required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                <UserRoundPlus className="w-3.5 h-3.5" />
-                מינימום אחיות
-              </span>
-              <input
-                type="number"
-                min={0}
-                value={values.minNurses}
-                onChange={(event) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    minNurses: Number(event.target.value),
-                  }))
-                }
-                required
-                className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
-              />
-            </label>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2">הרכב צוות נדרש</p>
+            <div className="grid grid-cols-2 gap-3">
+              {staffingFields.map((field) => (
+                <label key={field.field} className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-slate-500">{field.label}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={values[field.field]}
+                    onChange={(event) =>
+                      setValues((prev) => ({
+                        ...prev,
+                        [field.field]: Number(event.target.value),
+                      }))
+                    }
+                    required
+                    className="h-10 rounded-xl border border-slate-200 px-3 text-sm focus:border-[#1d5c8b] focus:ring-2 focus:ring-[#ebf4fb] outline-none transition-all"
+                  />
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* Actions */}

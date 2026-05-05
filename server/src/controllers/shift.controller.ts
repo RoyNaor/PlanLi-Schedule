@@ -15,8 +15,15 @@ const createShiftSchema = z.object({
   shift_date: z.string(),
   start_time: z.string(),
   end_time: z.string(),
-  min_doctors: z.number().int().min(0).optional().default(1),
-  min_nurses: z.number().int().min(0).optional().default(1),
+  min_doctors: z.number().int().min(0).optional().default(0),
+  min_nurses: z.number().int().min(0).optional().default(0),
+  min_midwives: z.number().int().min(0).optional().default(0),
+  min_obgyns: z.number().int().min(0).optional().default(0),
+  min_anesthesiologists: z.number().int().min(0).optional().default(0),
+  min_orderlies: z.number().int().min(0).optional().default(0),
+  min_pediatricians: z.number().int().min(0).optional().default(0),
+  min_shabbat_scribes: z.number().int().min(0).optional().default(0),
+  min_secretaries: z.number().int().min(0).optional().default(0),
 });
 
 const updateShiftSchema = createShiftSchema.omit({ week_start: true });
@@ -292,6 +299,13 @@ export const shiftController = {
         endTime: normalizedPayload.end_time,
         minDoctors: normalizedPayload.min_doctors,
         minNurses: normalizedPayload.min_nurses,
+        minMidwives: normalizedPayload.min_midwives,
+        minObgyns: normalizedPayload.min_obgyns,
+        minAnesthesiologists: normalizedPayload.min_anesthesiologists,
+        minOrderlies: normalizedPayload.min_orderlies,
+        minPediatricians: normalizedPayload.min_pediatricians,
+        minShabbatScribes: normalizedPayload.min_shabbat_scribes,
+        minSecretaries: normalizedPayload.min_secretaries,
       });
 
       return res.status(201).json({
@@ -392,6 +406,13 @@ export const shiftController = {
         endTime: normalizedEndTime,
         minDoctors: parsed.min_doctors,
         minNurses: parsed.min_nurses,
+        minMidwives: parsed.min_midwives,
+        minObgyns: parsed.min_obgyns,
+        minAnesthesiologists: parsed.min_anesthesiologists,
+        minOrderlies: parsed.min_orderlies,
+        minPediatricians: parsed.min_pediatricians,
+        minShabbatScribes: parsed.min_shabbat_scribes,
+        minSecretaries: parsed.min_secretaries,
       });
 
       if (!updated) {

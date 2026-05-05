@@ -5,16 +5,15 @@ import {
   Check,
   Pencil,
   Plus,
-  Stethoscope,
   Trash2,
   User as UserIcon,
   Users,
   X,
-  ShieldCheck,
   Search,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
+import { getRoleLabel, userRoleOptions } from "../utils/staffing";
 
 interface UserData {
   id: string;
@@ -36,20 +35,14 @@ interface EditFormData {
 const API_BASE = "http://localhost:3000/api";
 
 const formatRoleLabel = (role: string) => {
-  const roleMap: Record<string, string> = {
-    admin: "מנהלים",
-    doctor: "רופאים",
-    nurse: "אחיות",
-  };
-
-  return roleMap[role] ?? role;
+  return getRoleLabel(role);
 };
 
 const defaultAddForm = {
   email: "",
   password: "",
   full_name: "",
-  role: "doctor",
+  role: "midwife",
   phone: "",
 };
 
@@ -71,7 +64,7 @@ export default function UserManagementPage() {
   const [editForm, setEditForm] = useState<EditFormData>({
     email: "",
     full_name: "",
-    role: "doctor",
+    role: "midwife",
     phone: "",
   });
 
@@ -105,9 +98,6 @@ export default function UserManagementPage() {
 
     return {
       totalUsers: users.length,
-      doctors: roleCounts.doctor ?? 0,
-      nurses: roleCounts.nurse ?? 0,
-      admins: roleCounts.admin ?? 0,
       roleCounts,
     };
   }, [users]);
@@ -259,41 +249,22 @@ export default function UserManagementPage() {
             </p>
           </article>
 
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">רופאים</p>
-              <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                <Stethoscope className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">
-              {analytics.doctors}
-            </p>
-          </article>
-
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">אחיות</p>
-              <span className="w-10 h-10 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center">
-                <Stethoscope className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">
-              {analytics.nurses}
-            </p>
-          </article>
-
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">מנהלים</p>
-              <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5" />
-              </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">
-              {analytics.admins}
-            </p>
-          </article>
+          {userRoleOptions.map((option) => {
+            const Icon = option.icon;
+            return (
+              <article key={option.value} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">{option.pluralLabel}</p>
+                  <span className="w-10 h-10 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
+                    <Icon className="w-5 h-5" />
+                  </span>
+                </div>
+                <p className="text-3xl font-semibold text-slate-900 mt-3">
+                  {analytics.roleCounts[option.value] ?? 0}
+                </p>
+              </article>
+            );
+          })}
         </section>
 
         {showAddForm && (
@@ -352,9 +323,11 @@ export default function UserManagementPage() {
                     setFormData({ ...formData, role: e.target.value })
                   }
                 >
-                  <option value="admin">Admin</option>
-                  <option value="doctor">Doctor</option>
-                  <option value="nurse">Nurse</option>
+                  {userRoleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -412,9 +385,11 @@ export default function UserManagementPage() {
                   className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
                 >
                   <option value="all">כל התפקידים</option>
-                  <option value="admin">מנהלים</option>
-                  <option value="doctor">רופאים</option>
-                  <option value="nurse">אחיות</option>
+                  {userRoleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.pluralLabel}
+                    </option>
+                  ))}
                 </select>
 
                 <button
@@ -475,7 +450,7 @@ export default function UserManagementPage() {
                         </div>
                         {u.full_name}
                       </td>
-                      <td className="px-6 py-4">{u.role}</td>
+                      <td className="px-6 py-4">{getRoleLabel(u.role)}</td>
                       <td className="px-6 py-4 text-slate-600">
                         {u.phone ?? "—"}
                       </td>
@@ -626,9 +601,11 @@ export default function UserManagementPage() {
                   }
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="doctor">Doctor</option>
-                  <option value="nurse">Nurse</option>
+                  {userRoleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
