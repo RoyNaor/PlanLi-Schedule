@@ -1,4 +1,5 @@
 import { parseIsoDateToUtc } from "../../utils/date.utils";
+import { LoadingState } from "../ui/LoadingIndicator";
 import { dayNumberFormatter } from "./formatters";
 import { ScheduleShiftCard } from "./ShiftCard";
 import type { ScheduleAssignment } from "./types";
@@ -23,7 +24,7 @@ export function ScheduleDayView({
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       {loading ? (
-        <div className="p-8 text-center text-slate-400 text-sm">טוען סידור...</div>
+        <LoadingState label="טוען סידור..." />
       ) : (
         <div className="p-4 max-w-lg mx-auto">
           <p className="text-xs text-slate-500 mb-3 text-center">

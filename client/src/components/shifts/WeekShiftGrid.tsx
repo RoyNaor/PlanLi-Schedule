@@ -1,5 +1,6 @@
 import { getJerusalemTodayIsoDate, parseIsoDateToUtc } from "../../utils/date.utils";
 import type { Shift } from "../types";
+import { LoadingState } from "../ui/LoadingIndicator";
 import ShiftCard from "./ShiftCard";
 
 type Props = {
@@ -73,7 +74,7 @@ export default function WeekShiftGrid({
       </div>
 
       {loading ? (
-        <div className="p-6 text-center text-slate-400 text-sm">טוען משמרות...</div>
+        <LoadingState label="טוען משמרות..." className="p-6" />
       ) : !weekStart || weekDates.length !== 7 ? (
         <div className="p-6 text-center text-slate-400 text-sm">בחר שבוע כדי להציג משמרות.</div>
       ) : (

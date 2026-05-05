@@ -1,5 +1,6 @@
 import { CalendarClock, Clock, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { LoadingSpinner } from "../ui/LoadingIndicator";
 
 type Props = {
   isOpen: boolean;
@@ -125,9 +126,16 @@ export default function CollectionDeadlineModal({
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 h-11 rounded-xl bg-[#1d5c8b] text-white font-semibold text-sm hover:bg-[#164e78] disabled:opacity-60 transition-colors shadow-sm"
+                className="flex-1 h-11 rounded-xl bg-[#1d5c8b] text-white font-semibold text-sm hover:bg-[#164e78] disabled:opacity-60 transition-colors shadow-sm inline-flex items-center justify-center gap-2"
               >
-                {saving ? "שומר..." : "פתח איסוף אילוצים"}
+                {saving ? (
+                  <>
+                    <LoadingSpinner className="w-4 h-4" />
+                    שומר...
+                  </>
+                ) : (
+                  "פתח איסוף אילוצים"
+                )}
               </button>
               <button
                 type="button"

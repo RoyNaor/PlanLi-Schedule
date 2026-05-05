@@ -21,6 +21,7 @@ import {
   Shield,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
+import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
 import {
   addDaysToIsoDate,
   getJerusalemTodayIsoDate,
@@ -475,7 +476,7 @@ export default function ScheduleReviewPage() {
             onClick={handlePublish}
             disabled={!selectedVersionId || publishing}
           >
-            <Send className="w-4 h-4" />
+            {publishing ? <LoadingSpinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
             {publishing ? "מפרסם..." : "פרסם גרסה נבחרת"}
           </button>
         </div>
@@ -555,7 +556,11 @@ export default function ScheduleReviewPage() {
             {error}
           </div>
         ) : null}
-        {loading ? <p className="text-slate-500 text-sm">טוען...</p> : null}
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white">
+            <LoadingState label="טוען סידור..." />
+          </div>
+        ) : null}
 
         {!loading ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -670,7 +675,11 @@ export default function ScheduleReviewPage() {
                             className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
                             disabled={saving}
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[#1d5c8b]" />
+                            {saving ? (
+                              <LoadingSpinner className="w-3.5 h-3.5 text-[#1d5c8b]" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#1d5c8b]" />
+                            )}
                             סיים עריכה
                           </button>
                         ) : (
@@ -782,7 +791,11 @@ export default function ScheduleReviewPage() {
                                             className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 flex items-center justify-center transition-colors disabled:opacity-50"
                                             title="הסר שיבוץ"
                                           >
-                                            <X className="w-3 h-3 text-red-600" />
+                                            {saving ? (
+                                              <LoadingSpinner className="w-3 h-3 text-red-600" />
+                                            ) : (
+                                              <X className="w-3 h-3 text-red-600" />
+                                            )}
                                           </button>
                                         )}
                                       </div>
@@ -827,7 +840,11 @@ export default function ScheduleReviewPage() {
                                       className="h-7 w-7 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 flex items-center justify-center transition-colors"
                                       title="הוסף עובד"
                                     >
-                                      <Plus className="w-3.5 h-3.5 text-white" />
+                                      {saving ? (
+                                        <LoadingSpinner className="w-3.5 h-3.5 text-white" />
+                                      ) : (
+                                        <Plus className="w-3.5 h-3.5 text-white" />
+                                      )}
                                     </button>
                                   </div>
                                 )}
@@ -854,7 +871,9 @@ export default function ScheduleReviewPage() {
                   </div>
 
                   {constraintsLoading ? (
-                    <p className="text-sm text-slate-500">טוען מגבלות...</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white">
+                      <LoadingState label="טוען מגבלות..." className="p-6" />
+                    </div>
                   ) : constraintsSummary.length === 0 ? (
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
                       <p className="text-sm text-slate-500">אין עובדים במערכת.</p>

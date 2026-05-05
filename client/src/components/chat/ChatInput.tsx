@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send } from "lucide-react";
+import { LoadingSpinner } from "../ui/LoadingIndicator";
 
 interface ChatInputProps {
   onSend: (value: string) => Promise<void>;
@@ -119,7 +120,7 @@ export function ChatInput({ onSend, sending }: ChatInputProps) {
             aria-label="שלח הודעה"
           >
             {sending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <LoadingSpinner className="w-4 h-4" />
             ) : (
               <Send className="w-4 h-4" />
             )}
