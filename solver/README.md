@@ -16,6 +16,12 @@ Server listens on `http://localhost:8080`.
 - `GET /health`
 - `POST /solve`
 
+The Node API calls this service through `SOLVER_SERVICE_URL`. You can verify the Node-to-solver link with:
+
+```bash
+curl http://localhost:3000/api/health/solver
+```
+
 ## Run tests
 
 ```bash
@@ -27,15 +33,20 @@ python -m unittest discover -s solver -p "test_*.py"
 ```json
 {
   "week_start": "2026-03-01",
-  "users": [{ "id": "u1", "role": "doctor" }, { "id": "u2", "role": "nurse" }],
+  "users": [
+    { "id": "midwife_1", "role": "midwife" },
+    { "id": "obgyn_1", "role": "obgyn" },
+    { "id": "anesthesia_1", "role": "anesthesiologist" }
+  ],
   "shifts": [
     {
       "id": 1,
       "shift_date": "2026-03-01",
       "start_time": "08:00",
       "end_time": "16:00",
-      "min_doctors": 1,
-      "min_nurses": 1
+      "min_midwives": 1,
+      "min_obgyns": 1,
+      "min_anesthesiologists": 1
     }
   ],
   "constraints": [
@@ -49,6 +60,18 @@ python -m unittest discover -s solver -p "test_*.py"
   ]
 }
 ```
+
+Supported staff roles:
+
+- `doctor`
+- `nurse`
+- `midwife`
+- `obgyn`
+- `anesthesiologist`
+- `orderly`
+- `pediatrician`
+- `shabbat_scribe`
+- `secretary`
 
 ## Response
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queryDatabase, withDatabaseTransaction } from "./database.service.js";
+import { SolverService, type SolverResponse } from "./solver.service.js";
 import { staffRoleValues } from "../utils/staffing.utils.js";
 
 type SolveRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
@@ -142,20 +143,6 @@ export interface PublishedScheduleView {
   assignments: ScheduleAssignmentView[];
 }
 
-const solverResponseSchema = z.object({
-  status: z.enum(["feasible", "infeasible"]),
-  assignments: z.array(
-    z.object({
-      shift_id: z.number().int().positive(),
-      user_id: z.string().min(1),
-    }),
-  ),
-  message: z.string().optional(),
-  solver_meta: z.record(z.string(), z.unknown()).optional(),
-});
-
-type SolverResponse = z.infer<typeof solverResponseSchema>;
-
 function mapRun(row: ScheduleRunRow): SolveRun {
   return {
     id: row.id,
@@ -212,81 +199,6 @@ function mapScheduleVersionDetail(
     createdAt: version.created_at.toISOString(),
     assignments: assignments.map(mapScheduleAssignment),
   };
-}
-
-function buildSolverUrl(): string {
-  const base = process.env.SOLVER_SERVICE_URL?.trim();
-  if (!base) {
-    throw new Error("SOLVER_SERVICE_URL is not configured");
-  }
-
-  return `${base.replace(/\/+$/, "")}/solve`;
-}
-
-function getSolveTimeoutMs(): number {
-  const raw = process.env.SOLVER_REQUEST_TIMEOUT_MS;
-  const parsed = raw ? Number(raw) : 60_000;
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 60_000;
-  }
-
-  return Math.floor(parsed);
-}
-
-async function callSolverService(payload: Record<string, unknown>): Promise<SolverResponse> {
-  const url = buildSolverUrl();
-  const timeoutMs = getSolveTimeoutMs();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (process.env.SOLVER_SERVICE_API_KEY) {
-    headers["x-api-key"] = process.env.SOLVER_SERVICE_API_KEY;
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    const responseText = await response.text();
-    let parsedBody: unknown = null;
-    if (responseText.trim()) {
-      try {
-        parsedBody = JSON.parse(responseText);
-      } catch {
-        throw new Error("Solver returned a non-JSON response");
-      }
-    }
-
-    if (!response.ok) {
-      const message =
-        parsedBody && typeof parsedBody === "object" && "error" in parsedBody
-          ? String((parsedBody as { error?: unknown }).error ?? "Unknown solver error")
-          : `Solver request failed with HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    const validated = solverResponseSchema.safeParse(parsedBody);
-    if (!validated.success) {
-      throw new Error("Solver response did not match expected schema");
-    }
-
-    return validated.data;
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Solver request timed out after ${timeoutMs}ms`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 export const ScheduleService = {
@@ -391,7 +303,7 @@ export const ScheduleService = {
     }
 
     const payload = await this.buildSolverPayload(weekStart);
-    const solverResponse = await callSolverService(payload);
+    const solverResponse = await SolverService.solve(payload);
 
     if (solverResponse.status === "infeasible") {
       return {
@@ -711,7 +623,7 @@ export const ScheduleService = {
 
     try {
       const payload = await this.buildSolverPayload(run.week_start);
-      const solverResponse = await callSolverService(payload);
+      const solverResponse = await SolverService.solve(payload);
 
       if (solverResponse.status !== "feasible") {
         throw new Error(solverResponse.message ?? "Solver reported infeasible");
