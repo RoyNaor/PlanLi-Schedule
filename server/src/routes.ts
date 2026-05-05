@@ -10,6 +10,7 @@ import { chatController } from "./controllers/chat.controller.js";
 import { userController } from "./controllers/user.controller.js";
 import { shiftController } from "./controllers/shift.controller.js";
 import { scheduleController } from "./controllers/schedule.controller.js";
+import { calendarController } from "./controllers/calendar.controller.js";
 import { requireAuth } from "./middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -77,6 +78,15 @@ router.get(
 );
 router.get("/api/admin/schedule", requireAuth, scheduleController.getPublishedScheduleAdmin);
 router.get("/api/my-schedule", requireAuth, scheduleController.getMyPublishedSchedule);
+
+router.post("/api/calendar/google/connect", requireAuth, calendarController.connectGoogle);
+router.get("/api/calendar/google/callback", calendarController.googleCallback);
+router.get("/api/calendar/status", requireAuth, calendarController.getStatus);
+router.post("/api/calendar/sync/outbound", requireAuth, calendarController.syncOutbound);
+router.post("/api/calendar/webhook", calendarController.receiveWebhook);
+router.get("/api/calendar/feed/:token.ics", calendarController.getWebcalFeed);
+router.post("/api/calendar/feed/rotate", requireAuth, calendarController.rotateFeedToken);
+router.post("/api/calendar/disconnect", requireAuth, calendarController.disconnect);
 
 router.post("/api/chat", requireAuth, chatController.sendMessage);
 router.get("/api/chat/:userId", requireAuth, chatController.getConversation);

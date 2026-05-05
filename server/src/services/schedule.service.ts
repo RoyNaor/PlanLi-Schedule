@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queryDatabase, withDatabaseTransaction } from "./database.service.js";
+import { CalendarSyncService } from "./calendar-sync.service.js";
 
 type SolveRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
 type WeekStatus = "DRAFT" | "COLLECTING" | "LOCKED" | "SOLVED" | "PUBLISHED";
@@ -531,11 +532,18 @@ export const ScheduleService = {
       assignment_count: String(assignments.length),
     });
 
-    return {
+    const publishedView = {
       weekStart: publishedVersion.week_start,
       version: summary,
       assignments: assignments.map(mapScheduleAssignment),
     };
+
+    // Keep publishing resilient: sync failure should not roll back published state.
+    void CalendarSyncService.syncPublishedVersion(publishedVersion.id).catch((error) => {
+      console.error("Failed to sync published schedule to Google Calendar:", error);
+    });
+
+    return publishedView;
   },
 
   async getPublishedScheduleForAdmin(
@@ -860,6 +868,15 @@ export const ScheduleService = {
        ON CONFLICT (schedule_version_id, shift_id, user_id) DO NOTHING`,
       [input.versionId, input.shiftId, input.userId],
     );
+
+    void CalendarSyncService.syncSingleAssignment({
+      versionId: input.versionId,
+      shiftId: input.shiftId,
+      userId: input.userId,
+      action: "upsert",
+    }).catch((error) => {
+      console.error("Failed to sync manual assignment to Google Calendar:", error);
+    });
   },
 
   async removeAssignment(input: {
@@ -874,6 +891,15 @@ export const ScheduleService = {
          AND user_id = $3`,
       [input.versionId, input.shiftId, input.userId],
     );
+
+    void CalendarSyncService.syncSingleAssignment({
+      versionId: input.versionId,
+      shiftId: input.shiftId,
+      userId: input.userId,
+      action: "delete",
+    }).catch((error) => {
+      console.error("Failed to remove Google Calendar assignment event:", error);
+    });
   },
 
   async getWeekConstraintsSummary(weekStart: string): Promise<
