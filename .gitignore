@@ -44,3 +44,6 @@ __pycache__/
 
 # misc
 coverage/
+
+#scripts
+dev.sh
