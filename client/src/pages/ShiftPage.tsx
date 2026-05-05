@@ -442,14 +442,6 @@ export default function ShiftPage() {
     [authHeaders, fetchWeeks, selectedWeek],
   );
 
-  const handleOpenCollectionNow = useCallback(async () => {
-    try {
-      await openConstraintCollection(new Date().toISOString());
-    } catch {
-      // Error alert is handled inside openConstraintCollection.
-    }
-  }, [openConstraintCollection]);
-
   // Clear polling interval on unmount.
   useEffect(() => {
     return () => {
@@ -601,15 +593,6 @@ export default function ShiftPage() {
                 {openingCollection ? <LoadingSpinner className="w-3 h-3" /> : null}
                 {openingCollection ? "פותח..." : "פתח איסוף"}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleOpenCollectionNow()}
-                disabled={!canOpenCollection || openingCollection}
-                className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 transition-colors"
-              >
-                דדליין עכשיו
-              </button>
-
               {selectedWeekSummary?.status === "COLLECTING" && (
                 <button
                   type="button"

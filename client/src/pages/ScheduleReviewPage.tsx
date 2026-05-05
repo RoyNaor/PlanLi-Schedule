@@ -19,6 +19,7 @@ import {
   Plus,
   ShieldAlert,
   Shield,
+  History,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
@@ -227,6 +228,9 @@ export default function ScheduleReviewPage() {
   const [saving, setSaving] = useState(false);
   const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
   const [addSelections, setAddSelections] = useState<Record<number, string>>({});
+
+  // History modal state
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Constraints tab state
   const [activeTab, setActiveTab] = useState<"schedule" | "constraints">("schedule");
@@ -470,15 +474,26 @@ export default function ScheduleReviewPage() {
             <h1 className="text-2xl font-bold text-slate-900">סקירת סידור</h1>
             <p className="text-sm text-slate-500 mt-0.5">סקירה, השוואה ופרסום גרסאות סידור לצוות.</p>
           </div>
-          <button
-            type="button"
-            className="h-10 px-5 rounded-xl bg-[#1d5c8b] text-white text-sm font-semibold hover:bg-[#164e78] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-2 self-start"
-            onClick={handlePublish}
-            disabled={!selectedVersionId || publishing}
-          >
-            {publishing ? <LoadingSpinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-            {publishing ? "מפרסם..." : "פרסם גרסה נבחרת"}
-          </button>
+          <div className="flex items-center gap-2 self-start">
+            <button
+              type="button"
+              className="h-10 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+              onClick={() => setHistoryOpen(true)}
+              disabled={versions.length === 0}
+            >
+              <History className="w-4 h-4" />
+              היסטוריה
+            </button>
+            <button
+              type="button"
+              className="h-10 px-5 rounded-xl bg-[#1d5c8b] text-white text-sm font-semibold hover:bg-[#164e78] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-2"
+              onClick={handlePublish}
+              disabled={!selectedVersionId || publishing}
+            >
+              {publishing ? <LoadingSpinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+              {publishing ? "מפרסם..." : "פרסם גרסה נבחרת"}
+            </button>
+          </div>
         </div>
 
         {/* Week navigator */}
@@ -563,58 +578,9 @@ export default function ScheduleReviewPage() {
         ) : null}
 
         {!loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Versions sidebar */}
-            <div className="lg:col-span-3 space-y-2">
-              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-                גרסאות ({versions.length})
-              </h2>
-              {versions.length === 0 ? (
-                <p className="text-sm text-slate-500 px-1">אין גרסאות לשבוע זה.</p>
-              ) : (
-                <div className="space-y-2">
-                  {versions.map((version) => {
-                    const isSelected = selectedVersionId === version.id;
-                    return (
-                      <button
-                        key={version.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedVersionId(version.id);
-                          setEditMode(false);
-                          setAddSelections({});
-                          void fetchVersionDetail(version.id);
-                        }}
-                        className={`w-full text-right rounded-xl border p-3 transition-all ${
-                          isSelected
-                            ? "border-[#1d5c8b]/40 bg-white shadow-md ring-1 ring-[#ebf4fb]"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={`text-sm font-semibold ${isSelected ? "text-[#1d5c8b]" : "text-slate-800"}`}>
-                            #{version.versionNumber}
-                          </p>
-                          {version.isPublished && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-[#ebf4fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d5c8b]">
-                              <BadgeCheck className="w-2.5 h-2.5" />
-                              פעילה
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {version.assignmentCount} שיבוצים
-                        </p>
-                        <SolverQualityBadge solverMeta={version.solverMeta} />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
+          <div>
             {/* Main content area */}
-            <div className="lg:col-span-9">
+            <div>
               {/* Tab bar */}
               <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-xl w-fit">
                 <button
@@ -992,6 +958,75 @@ export default function ScheduleReviewPage() {
           </div>
         ) : null}
       </div>
+
+      {historyOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+          onClick={() => setHistoryOpen(false)}
+        >
+          <div
+            className="w-full max-w-md max-h-[80vh] flex flex-col bg-white rounded-2xl shadow-xl border border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-900 inline-flex items-center gap-2">
+                <History className="w-4 h-4 text-[#1d5c8b]" />
+                היסטוריית גרסאות ({versions.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-2">
+              {versions.length === 0 ? (
+                <p className="text-sm text-slate-500 px-2 py-4 text-center">אין גרסאות לשבוע זה.</p>
+              ) : (
+                versions.map((version) => {
+                  const isSelected = selectedVersionId === version.id;
+                  return (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVersionId(version.id);
+                        setEditMode(false);
+                        setAddSelections({});
+                        void fetchVersionDetail(version.id);
+                        setHistoryOpen(false);
+                      }}
+                      className={`w-full text-right rounded-xl border p-3 transition-all ${
+                        isSelected
+                          ? "border-[#1d5c8b]/40 bg-[#ebf4fb]/40 ring-1 ring-[#ebf4fb]"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-sm font-semibold ${isSelected ? "text-[#1d5c8b]" : "text-slate-800"}`}>
+                          גרסה #{version.versionNumber}
+                        </p>
+                        {version.isPublished && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-[#ebf4fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d5c8b]">
+                            <BadgeCheck className="w-2.5 h-2.5" />
+                            פעילה
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {version.assignmentCount} שיבוצים · {formatDateTime(version.createdAt)}
+                      </p>
+                      <SolverQualityBadge solverMeta={version.solverMeta} />
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
