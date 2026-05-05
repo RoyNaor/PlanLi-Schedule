@@ -32,5 +32,11 @@ Thumbs.db
 # Firebase service account
 firebase-service-account.json
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
 # misc
 coverage/
