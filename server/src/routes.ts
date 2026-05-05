@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import {
   getDatabaseHealth,
   getHealth,
+  getSolverHealth,
   getVersion,
 } from "./controllers/system.controller.js";
 import { chatController } from "./controllers/chat.controller.js";
@@ -22,6 +23,7 @@ router.get("/", (_req: Request, res: Response) => {
 router.get("/api/health", getHealth);
 router.get("/api/version", getVersion);
 router.get("/api/health/database", getDatabaseHealth);
+router.get("/api/health/solver", getSolverHealth);
 
 router.post("/api/users/sync", requireAuth, userController.syncAuthenticatedUser);
 router.get("/api/users/me", requireAuth, userController.getAuthenticatedUser);
