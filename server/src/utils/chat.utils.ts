@@ -16,12 +16,6 @@ const LOCAL_CHAT_HELP_REPLY = `היי 😊 אני כאן כדי לעזור עם 
 • אני לא יכול/ה לעבוד ביום שלישי בין 10:00 ל-14:00
 • אם אפשר, אל תשבץ אותי במשמרת לילה השבוע`;
 
-const UNKNOWN_CHAT_REPLY = `לא בטוח שהבנתי למה התכוונת 🙂 אני יכול לעזור עם שיבוצים, זמינות ואילוצים.
-אפשר למשל לכתוב:
-• מה השיבוצים שלי לשבוע הקרוב?
-• אל תשבץ אותי בימים שני ורביעי
-• יש לי חופשה בתאריך 12.5`;
-
 const greetingPatterns = [
   "היי",
   "הי",
@@ -41,47 +35,6 @@ const helpPatterns = [
   "מה ניתן לעשות",
   "פקודות",
   "אפשרויות",
-];
-
-const schedulingSignals = [
-  "אילוץ",
-  "אילוצים",
-  "אסור",
-  "בוקר",
-  "בערב",
-  "בשבוע",
-  "בתאריך",
-  "היום",
-  "השבוע",
-  "זמין",
-  "זמינה",
-  "חופש",
-  "חופשה",
-  "יכולה",
-  "יכול",
-  "לילה",
-  "לעבוד",
-  "מחר",
-  "מחלה",
-  "משמר",
-  "סידור",
-  "עדיף",
-  "פנוי",
-  "פנויה",
-  "צהר",
-  "רביעי",
-  "ראשון",
-  "רופא",
-  "שבת",
-  "שבוע",
-  "שישי",
-  "שיבוצ",
-  "שני",
-  "שלישי",
-  "שעה",
-  "תור",
-  "תאריך",
-  "חמישי",
 ];
 
 const scheduleQueryPatterns = [
@@ -237,14 +190,8 @@ export function getLocalChatReply(input: string): string | null {
     return LOCAL_CHAT_HELP_REPLY;
   }
 
-  if (detectScheduleQueryRange(input)) {
-    return null;
-  }
-
-  if (!schedulingSignals.some((signal) => normalized.includes(signal))) {
-    return UNKNOWN_CHAT_REPLY;
-  }
-
+  // Only known, safe cache hits answer locally. Everything else goes to the model/API
+  // because Hebrew scheduling requests can be phrased in many valid ways.
   return null;
 }
 
