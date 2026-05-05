@@ -158,8 +158,8 @@ const intentSystemPrompt = `אתה עוזר לזיהוי כוונה (intent) ע�
 {"intent":"constraint","confidence":0.92,"assistant_reply":"מעולה ✅ סימנתי שאינך זמין ביום שלישי בערב. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T18:00:00+02:00","end_time":"2026-02-24T22:00:00+02:00","type":"HARD","reason":"תור לרופא"}]}
 {"intent":"constraint","confidence":0.84,"assistant_reply":"תודה 🙌 חסמתי את שני חלונות הזמן שביקשת. צריך עוד משהו?","constraints":[{"start_time":"2026-02-24T08:00:00+02:00","end_time":"2026-02-24T12:00:00+02:00","type":"HARD","reason":"חופשת מחלה"},{"start_time":"2026-02-25T14:00:00+02:00","end_time":"2026-02-25T18:00:00+02:00","type":"SOFT","reason":"מעדיף זמן משפחה"}]}
 {"intent":"constraint","confidence":0.35,"assistant_reply":"אשמח להוסיף, אבל מה השעות המדויקות לחסימה ביום שלישי? ⏰ צריך עוד משהו?","constraints":[]}
-{"intent":"schedule_query","confidence":0.88,"assistant_reply":"בשמחה 📅 רוצה שאבדוק את השבוע הזה או השבוע הבא?","constraints":[]}
-{"intent":"general","confidence":0.75,"assistant_reply":"בשמחה 😊 אני יכול לעזור לבדוק שיבוצים או להוסיף אילוצי זמינות. אפשר לכתוב למשל: \"מה השיבוצים שלי לשבוע הקרוב?\" או \"אל תשבץ אותי ביום ראשון בערב\".","constraints":[]}
+{"intent":"schedule_query","confidence":0.88,"assistant_reply":"בודק את השיבוצים שלך לשבוע המבוקש.","constraints":[]}
+{"intent":"general","confidence":0.75,"assistant_reply":"אני יכול לעזור לבדוק שיבוצים או להוסיף אילוצי זמינות. אפשר לכתוב למשל: \"מה השיבוצים שלי לשבוע הקרוב?\" או \"אל תשבץ אותי ביום ראשון בערב\".","constraints":[]}
 {"intent":"out_of_scope","confidence":0.99,"assistant_reply":"אני כאן בעיקר לשיבוצים וזמינות 🩺📆 אפשר לכתוב \"מה השיבוצים שלי לשבוע הקרוב?\" או \"אני לא יכול/ה ביום שלישי בערב\".","constraints":[]}`;
 
 export const ChatService = {
@@ -208,6 +208,20 @@ export const ChatService = {
     ];
 
     const intentResponse = await this.generateAssistantResponse(conversationWithIncomingMessage);
+
+    if (intentResponse.intent === "schedule_query") {
+      const queryWeekStart = resolveScheduleQueryWeekStart(message) ?? getWeekStartSundayInIsrael(new Date());
+      const schedule = await ScheduleService.getPublishedScheduleForUser({
+        weekStart: queryWeekStart,
+        userId,
+      });
+
+      return {
+        conversationId,
+        assistantText: buildPublishedScheduleReply(schedule, queryWeekStart),
+      };
+    }
+
     const isConstraintIntent = intentResponse.intent === "constraint";
     const shouldPersistMessages = isConstraintIntent;
 
