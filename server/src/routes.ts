@@ -9,6 +9,8 @@ import {
 } from "./controllers/system.controller.js";
 import { chatController } from "./controllers/chat.controller.js";
 import { userController } from "./controllers/user.controller.js";
+import { departmentController } from "./controllers/department.controller.js";
+import { seniorityController } from "./controllers/seniority.controller.js";
 import { shiftController } from "./controllers/shift.controller.js";
 import { scheduleController } from "./controllers/schedule.controller.js";
 import { calendarController } from "./controllers/calendar.controller.js";
@@ -32,6 +34,12 @@ router.get("/api/users", requireAuth, userController.listUsers);
 router.post("/api/users", requireAuth, userController.createUser);
 router.put("/api/users/:userId", requireAuth, userController.updateUser);
 router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
+
+router.get("/api/departments", requireAuth, departmentController.listDepartments);
+router.post("/api/departments", requireAuth, departmentController.createDepartment);
+router.put("/api/departments/:departmentId", requireAuth, departmentController.updateDepartment);
+
+router.get("/api/seniorities", requireAuth, seniorityController.listSeniorities);
 
 router.get("/api/weeks", requireAuth, shiftController.listWeeks);
 router.post("/api/weeks", requireAuth, shiftController.createWeek);

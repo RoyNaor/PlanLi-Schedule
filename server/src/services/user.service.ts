@@ -1,4 +1,5 @@
-import { queryDatabase } from "./database.service.js";
+import type { PoolClient } from "pg";
+import { queryDatabase, withDatabaseTransaction } from "./database.service.js";
 
 interface UserRow {
   id: string;
@@ -6,8 +7,21 @@ interface UserRow {
   full_name: string;
   role: string;
   phone: string | null;
+  seniority_id: string | null;
+  seniority_code: string | null;
+  seniority_name: string | null;
+  seniority_sort_order: number | null;
+  seniority_is_active: boolean | null;
   created_at: Date;
   updated_at: Date;
+}
+
+interface UserDepartmentRow {
+  user_id: string;
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
 }
 
 interface CreateUserInput {
@@ -16,6 +30,8 @@ interface CreateUserInput {
   fullName: string;
   role: string;
   phone: string | null;
+  departmentIds: string[];
+  seniorityId: string | null;
 }
 
 interface UpdateUserInput {
@@ -24,6 +40,28 @@ interface UpdateUserInput {
   fullName: string;
   role: string;
   phone: string | null;
+  departmentIds: string[];
+  seniorityId: string | null;
+}
+
+export interface UserDepartment {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+}
+
+export interface UserSeniority {
+  id: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface UserRecord extends UserRow {
+  departments: UserDepartment[];
+  seniority: UserSeniority | null;
 }
 
 export interface UserProfile {
@@ -32,99 +70,279 @@ export interface UserProfile {
   fullName: string;
   role: string;
   phone: string | null;
+  departments: UserDepartment[];
+  seniority: UserSeniority | null;
 }
 
-// Maps raw DB column names to the API-friendly user profile shape.
-function mapUser(row: UserRow): UserProfile {
+type Queryable = Pick<PoolClient, "query">;
+
+function normalizeDepartmentIds(departmentIds: string[]): string[] {
+  return Array.from(new Set(departmentIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+function mapDepartment(row: UserDepartmentRow): UserDepartment {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    isActive: row.is_active,
+  };
+}
+
+function mapSeniority(row: UserRow): UserSeniority | null {
+  if (!row.seniority_id || !row.seniority_code || !row.seniority_name) {
+    return null;
+  }
+
+  return {
+    id: row.seniority_id,
+    code: row.seniority_code,
+    name: row.seniority_name,
+    sortOrder: row.seniority_sort_order ?? 0,
+    isActive: row.seniority_is_active ?? false,
+  };
+}
+
+function mapUser(row: UserRow, departments: UserDepartment[]): UserProfile {
   return {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
     role: row.role,
     phone: row.phone,
+    departments,
+    seniority: mapSeniority(row),
   };
 }
 
+async function getDepartmentsForUserIds(userIds: string[]): Promise<Map<string, UserDepartment[]>> {
+  const map = new Map<string, UserDepartment[]>();
+  if (userIds.length === 0) return map;
+
+  const result = await queryDatabase<UserDepartmentRow>(
+    `SELECT ud.user_id,
+            d.id::text AS id,
+            d.name,
+            d.code,
+            d.is_active
+     FROM user_departments ud
+     INNER JOIN departments d ON d.id = ud.department_id
+     WHERE ud.user_id = ANY($1::varchar[])
+     ORDER BY d.name ASC`,
+    [userIds],
+  );
+
+  for (const row of result.rows) {
+    const list = map.get(row.user_id) ?? [];
+    list.push(mapDepartment(row));
+    map.set(row.user_id, list);
+  }
+
+  return map;
+}
+
+async function getDepartmentsForUserId(userId: string): Promise<UserDepartment[]> {
+  const departmentsByUser = await getDepartmentsForUserIds([userId]);
+  return departmentsByUser.get(userId) ?? [];
+}
+
+async function assertDepartmentsExist(client: Queryable, departmentIds: string[]): Promise<void> {
+  if (departmentIds.length === 0) return;
+
+  const result = await client.query<{ id: string }>(
+    `SELECT id::text AS id
+     FROM departments
+     WHERE id = ANY($1::uuid[])`,
+    [departmentIds],
+  );
+
+  if (result.rows.length !== departmentIds.length) {
+    throw new Error("One or more departments do not exist");
+  }
+}
+
+async function replaceUserDepartments(
+  client: Queryable,
+  userId: string,
+  rawDepartmentIds: string[],
+): Promise<void> {
+  const departmentIds = normalizeDepartmentIds(rawDepartmentIds);
+  await assertDepartmentsExist(client, departmentIds);
+
+  await client.query("DELETE FROM user_departments WHERE user_id = $1", [userId]);
+
+  for (const departmentId of departmentIds) {
+    await client.query(
+      `INSERT INTO user_departments (user_id, department_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, department_id) DO NOTHING`,
+      [userId, departmentId],
+    );
+  }
+}
+
 export const UserService = {
-  // Fetches a user profile using the primary key identifier.
   async getUserById(userId: string): Promise<UserProfile | null> {
     const result = await queryDatabase<UserRow>(
-      `SELECT id, email, full_name, role, phone, created_at, updated_at
-       FROM users
-       WHERE id = $1`,
+      `SELECT u.id,
+              u.email,
+              u.full_name,
+              u.role,
+              u.phone,
+              u.seniority_id::text AS seniority_id,
+              s.code AS seniority_code,
+              s.name AS seniority_name,
+              s.sort_order AS seniority_sort_order,
+              s.is_active AS seniority_is_active,
+              u.created_at,
+              u.updated_at
+       FROM users u
+       LEFT JOIN seniorities s ON s.id = u.seniority_id
+       WHERE u.id = $1`,
       [userId],
     );
 
     const row = result.rows[0];
-    return row ? mapUser(row) : null;
+    if (!row) return null;
+
+    return mapUser(row, await getDepartmentsForUserId(row.id));
   },
 
-  // Finds a user by case-insensitive email address for auth compatibility.
   async getUserByEmail(email: string): Promise<UserProfile | null> {
     const result = await queryDatabase<UserRow>(
-      `SELECT id, email, full_name, role, phone, created_at, updated_at
-       FROM users
-       WHERE LOWER(email) = LOWER($1)
+      `SELECT u.id,
+              u.email,
+              u.full_name,
+              u.role,
+              u.phone,
+              u.seniority_id::text AS seniority_id,
+              s.code AS seniority_code,
+              s.name AS seniority_name,
+              s.sort_order AS seniority_sort_order,
+              s.is_active AS seniority_is_active,
+              u.created_at,
+              u.updated_at
+       FROM users u
+       LEFT JOIN seniorities s ON s.id = u.seniority_id
+       WHERE LOWER(u.email) = LOWER($1)
        LIMIT 1`,
       [email],
     );
 
     const row = result.rows[0];
-    return row ? mapUser(row) : null;
+    if (!row) return null;
+
+    return mapUser(row, await getDepartmentsForUserId(row.id));
   },
 
-  // Resolves a user by id first, then falls back to email if needed.
   async getUserByIdOrEmail(userId: string, email: string): Promise<UserProfile | null> {
     const byId = await this.getUserById(userId);
-
-    if (byId) {
-      return byId;
-    }
+    if (byId) return byId;
 
     return this.getUserByEmail(email);
   },
 
-  // Returns all users for administrative management screens.
-  async listUsers(): Promise<UserRow[]> {
+  async listUsers(): Promise<UserRecord[]> {
     const result = await queryDatabase<UserRow>(
-      `SELECT id, email, full_name, role, phone, created_at, updated_at
-       FROM users
-       ORDER BY created_at DESC`,
+      `SELECT u.id,
+              u.email,
+              u.full_name,
+              u.role,
+              u.phone,
+              u.seniority_id::text AS seniority_id,
+              s.code AS seniority_code,
+              s.name AS seniority_name,
+              s.sort_order AS seniority_sort_order,
+              s.is_active AS seniority_is_active,
+              u.created_at,
+              u.updated_at
+       FROM users u
+       LEFT JOIN seniorities s ON s.id = u.seniority_id
+       ORDER BY u.created_at DESC`,
     );
 
-    return result.rows;
+    const departmentsByUser = await getDepartmentsForUserIds(result.rows.map((row) => row.id));
+    return result.rows.map((row) => ({
+      ...row,
+      departments: departmentsByUser.get(row.id) ?? [],
+      seniority: mapSeniority(row),
+    }));
   },
 
-  // Persists a provisioned user record linked to Firebase UID.
-  async createUser(input: CreateUserInput): Promise<UserRow> {
-    const result = await queryDatabase<UserRow>(
-      `INSERT INTO users (id, email, full_name, role, phone)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, email, full_name, role, phone, created_at, updated_at`,
-      [input.id, input.email, input.fullName, input.role, input.phone],
-    );
+  async createUser(input: CreateUserInput): Promise<UserRecord> {
+    const created = await withDatabaseTransaction(async (client) => {
+      const result = await client.query<UserRow>(
+        `INSERT INTO users (id, email, full_name, role, phone, seniority_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id,
+                   email,
+                   full_name,
+                   role,
+                   phone,
+                   seniority_id::text AS seniority_id,
+                   NULL::text AS seniority_code,
+                   NULL::text AS seniority_name,
+                   NULL::integer AS seniority_sort_order,
+                   NULL::boolean AS seniority_is_active,
+                   created_at,
+                   updated_at`,
+        [input.id, input.email, input.fullName, input.role, input.phone, input.seniorityId],
+      );
 
-    return result.rows[0] as UserRow;
+      const row = result.rows[0] as UserRow;
+      await replaceUserDepartments(client, row.id, input.departmentIds);
+      return row;
+    });
+
+    return {
+      ...created,
+      departments: await getDepartmentsForUserId(created.id),
+      seniority: (await this.getUserById(created.id))?.seniority ?? null,
+    };
   },
 
-  // Updates an existing user profile by id.
-  async updateUser(input: UpdateUserInput): Promise<UserRow | null> {
-    const result = await queryDatabase<UserRow>(
-      `UPDATE users
-       SET email = $2,
-           full_name = $3,
-           role = $4,
-           phone = $5,
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, email, full_name, role, phone, created_at, updated_at`,
-      [input.id, input.email, input.fullName, input.role, input.phone],
-    );
+  async updateUser(input: UpdateUserInput): Promise<UserRecord | null> {
+    const updated = await withDatabaseTransaction(async (client) => {
+      const result = await client.query<UserRow>(
+        `UPDATE users
+         SET email = $2,
+             full_name = $3,
+             role = $4,
+             phone = $5,
+             seniority_id = $6,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id,
+                   email,
+                   full_name,
+                   role,
+                   phone,
+                   seniority_id::text AS seniority_id,
+                   NULL::text AS seniority_code,
+                   NULL::text AS seniority_name,
+                   NULL::integer AS seniority_sort_order,
+                   NULL::boolean AS seniority_is_active,
+                   created_at,
+                   updated_at`,
+        [input.id, input.email, input.fullName, input.role, input.phone, input.seniorityId],
+      );
 
-    return result.rows[0] ?? null;
+      const row = result.rows[0];
+      if (!row) return null;
+
+      await replaceUserDepartments(client, row.id, input.departmentIds);
+      return row;
+    });
+
+    if (!updated) return null;
+
+    return {
+      ...updated,
+      departments: await getDepartmentsForUserId(updated.id),
+      seniority: (await this.getUserById(updated.id))?.seniority ?? null,
+    };
   },
 
-  // Deletes a user profile by id.
   async deleteUser(userId: string): Promise<boolean> {
     const result = await queryDatabase<{ id: string }>(
       `DELETE FROM users WHERE id = $1 RETURNING id`,
