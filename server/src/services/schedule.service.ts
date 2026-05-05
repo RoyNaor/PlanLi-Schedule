@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queryDatabase, withDatabaseTransaction } from "./database.service.js";
+import { staffRoleValues } from "../utils/staffing.utils.js";
 
 type SolveRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
 type WeekStatus = "DRAFT" | "COLLECTING" | "LOCKED" | "SOLVED" | "PUBLISHED";
@@ -32,6 +33,13 @@ interface ShiftRow {
   end_time: string;
   min_doctors: number;
   min_nurses: number;
+  min_midwives: number;
+  min_obgyns: number;
+  min_anesthesiologists: number;
+  min_orderlies: number;
+  min_pediatricians: number;
+  min_shabbat_scribes: number;
+  min_secretaries: number;
 }
 
 interface UserRow {
@@ -759,7 +767,14 @@ export const ScheduleService = {
               start_time,
               end_time,
               min_doctors,
-              min_nurses
+              min_nurses,
+              min_midwives,
+              min_obgyns,
+              min_anesthesiologists,
+              min_orderlies,
+              min_pediatricians,
+              min_shabbat_scribes,
+              min_secretaries
        FROM shifts
        WHERE week_start = $1
        ORDER BY shift_date ASC, start_time ASC`,
@@ -769,8 +784,9 @@ export const ScheduleService = {
     const usersResult = await queryDatabase<UserRow>(
       `SELECT id, role
        FROM users
-       WHERE role IN ('doctor', 'nurse')
+       WHERE role = ANY($1)
        ORDER BY role ASC, id ASC`,
+      [staffRoleValues],
     );
 
     const constraintsResult = await queryDatabase<ConstraintRow>(
@@ -784,9 +800,9 @@ export const ScheduleService = {
        FROM constraints c
        INNER JOIN users u ON u.id = c.user_id
        WHERE c.week_start = $1
-         AND u.role IN ('doctor', 'nurse')
+         AND u.role = ANY($2)
        ORDER BY c.created_at ASC`,
-      [weekStart],
+      [weekStart, staffRoleValues],
     );
 
     return {
@@ -802,6 +818,13 @@ export const ScheduleService = {
         end_time: row.end_time,
         min_doctors: row.min_doctors,
         min_nurses: row.min_nurses,
+        min_midwives: row.min_midwives,
+        min_obgyns: row.min_obgyns,
+        min_anesthesiologists: row.min_anesthesiologists,
+        min_orderlies: row.min_orderlies,
+        min_pediatricians: row.min_pediatricians,
+        min_shabbat_scribes: row.min_shabbat_scribes,
+        min_secretaries: row.min_secretaries,
       })),
       constraints: constraintsResult.rows.map((row) => ({
         id: row.id,
@@ -900,8 +923,9 @@ export const ScheduleService = {
     }>(
       `SELECT id, email, full_name, role
        FROM users
-       WHERE role IN ('doctor', 'nurse')
+       WHERE role = ANY($1)
        ORDER BY role ASC, full_name ASC`,
+      [staffRoleValues],
     );
 
     const constraintsResult = await queryDatabase<{

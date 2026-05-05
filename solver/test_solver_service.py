@@ -88,6 +88,41 @@ class SolverServiceTests(unittest.TestCase):
         self.assertEqual(body["status"], "feasible")
         self.assertGreaterEqual(body["solver_meta"]["soft_violations"], 1)
 
+    def test_solve_supports_labor_ward_staff_roles(self):
+        payload = self._base_payload()
+        payload["users"] = [
+            {"id": "midwife_1", "role": "midwife"},
+            {"id": "obgyn_1", "role": "obgyn"},
+            {"id": "anesthesiologist_1", "role": "anesthesiologist"},
+            {"id": "orderly_1", "role": "orderly"},
+            {"id": "pediatrician_1", "role": "pediatrician"},
+            {"id": "scribe_1", "role": "shabbat_scribe"},
+            {"id": "secretary_1", "role": "secretary"},
+        ]
+        payload["shifts"][0].update(
+            {
+                "min_doctors": 0,
+                "min_nurses": 0,
+                "min_midwives": 1,
+                "min_obgyns": 1,
+                "min_anesthesiologists": 1,
+                "min_orderlies": 1,
+                "min_pediatricians": 1,
+                "min_shabbat_scribes": 1,
+                "min_secretaries": 1,
+            }
+        )
+
+        response = self.client.post("/solve", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["status"], "feasible")
+        self.assertEqual(
+            {assignment["user_id"] for assignment in body["assignments"]},
+            {user["id"] for user in payload["users"]},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
