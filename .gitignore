@@ -25,6 +25,7 @@ Thumbs.db
 
 # Agent-local files
 .agent/
+.claude/
 
 # Repo-local git hooks
 .githooks/
