@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Building2,
   ChevronsLeft,
   ChevronsRight,
   LogIn,
@@ -117,6 +118,16 @@ export default function Sidebar({
               >
                 <ShieldUser size={18} />
                 <span>ניהול משתמשים</span>
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-link ${currentPath === "/departments" ? "is-active" : ""}`}
+                onClick={() => handleNavigate("/departments")}
+                title="ניהול מחלקות"
+              >
+                <Building2 size={18} />
+                <span>ניהול מחלקות</span>
               </button>
 
               <button

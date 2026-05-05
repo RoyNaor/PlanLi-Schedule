@@ -8,6 +8,19 @@ export interface SessionUser {
   fullName: string;
   role: string;
   phone: string | null;
+  departments: Array<{
+    id: string;
+    name: string;
+    code: string;
+    isActive: boolean;
+  }>;
+  seniority: {
+    id: string;
+    name: string;
+    code: string;
+    sortOrder: number;
+    isActive: boolean;
+  } | null;
 }
 
 interface StoredSession {
