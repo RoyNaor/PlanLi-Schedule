@@ -22,9 +22,10 @@ test("getLocalChatReply answers greetings and help without model routing", () =>
   assert.match(getLocalChatReply("מה אפשר לעשות?") ?? "", /אל תשבץ אותי/);
 });
 
-test("getLocalChatReply redirects unknown commands but leaves constraints for extraction", () => {
-  assert.match(getLocalChatReply("ספר לי בדיחה") ?? "", /לא בטוח שהבנתי/);
+test("getLocalChatReply only answers known cache hits and lets API handle the rest", () => {
+  assert.equal(getLocalChatReply("ספר לי בדיחה"), null);
   assert.equal(getLocalChatReply("אני לא יכול ביום רביעי בערב"), null);
+  assert.equal(getLocalChatReply("אל תשבץ אותי ביום ראשון בערב"), null);
 });
 
 test("resolveScheduleQueryWeekStart resolves current and next week schedule commands", () => {
