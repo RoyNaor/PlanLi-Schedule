@@ -2,7 +2,12 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { UserService } from "../services/user.service.js";
 import { FirebaseAdminService } from "../services/firebase-admin.service.js";
+import { DepartmentService } from "../services/department.service.js";
+import { SeniorityService } from "../services/seniority.service.js";
 import { userRoleValues } from "../utils/staffing.utils.js";
+
+const departmentIdsSchema = z.array(z.string().uuid()).optional().default([]);
+const seniorityIdSchema = z.string().uuid().nullable().optional().default(null);
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -10,6 +15,8 @@ const createUserSchema = z.object({
   full_name: z.string().min(1),
   role: z.enum(userRoleValues),
   phone: z.string().trim().min(1).nullable().optional(),
+  department_ids: departmentIdsSchema,
+  seniority_id: seniorityIdSchema,
 });
 
 const updateUserSchema = z.object({
@@ -17,7 +24,44 @@ const updateUserSchema = z.object({
   full_name: z.string().min(1),
   role: z.enum(userRoleValues),
   phone: z.string().trim().min(1).nullable().optional(),
+  department_ids: departmentIdsSchema,
+  seniority_id: seniorityIdSchema,
 });
+
+function normalizeDepartmentIds(departmentIds: string[]): string[] {
+  return Array.from(new Set(departmentIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+async function validateDepartmentMembership(
+  role: string,
+  departmentIds: string[],
+): Promise<string | null> {
+  if (role !== "admin" && departmentIds.length === 0) {
+    return "Staff users must be assigned to at least one department";
+  }
+
+  const existingCount = await DepartmentService.countExistingDepartments(departmentIds);
+  if (existingCount !== departmentIds.length) {
+    return "One or more departments do not exist";
+  }
+
+  return null;
+}
+
+async function validateSeniority(role: string, seniorityId: string | null): Promise<string | null> {
+  if (role === "admin") return null;
+
+  if (!seniorityId) {
+    return "Staff users must have a seniority";
+  }
+
+  const existingCount = await SeniorityService.countExistingSeniorities([seniorityId]);
+  if (existingCount !== 1) {
+    return "Seniority does not exist";
+  }
+
+  return null;
+}
 
 async function requireAdmin(req: Request, res: Response) {
   if (!req.authUser?.uid) {
@@ -115,6 +159,18 @@ export const userController = {
       }
 
       const parsed = createUserSchema.parse(req.body);
+      const departmentIds = normalizeDepartmentIds(parsed.department_ids);
+      const departmentError = await validateDepartmentMembership(parsed.role, departmentIds);
+      if (departmentError) {
+        return res.status(400).json({ error: departmentError });
+      }
+
+      const seniorityId = parsed.role === "admin" ? null : parsed.seniority_id;
+      const seniorityError = await validateSeniority(parsed.role, seniorityId);
+      if (seniorityError) {
+        return res.status(400).json({ error: seniorityError });
+      }
+
       const firebaseUid = await FirebaseAdminService.createUser(
         parsed.email.trim(),
         parsed.password,
@@ -126,6 +182,8 @@ export const userController = {
         fullName: parsed.full_name.trim(),
         role: parsed.role,
         phone: parsed.phone ?? null,
+        departmentIds,
+        seniorityId,
       });
 
       return res.status(201).json(createdUser);
@@ -157,12 +215,26 @@ export const userController = {
       }
 
       const parsed = updateUserSchema.parse(req.body);
+      const departmentIds = normalizeDepartmentIds(parsed.department_ids);
+      const departmentError = await validateDepartmentMembership(parsed.role, departmentIds);
+      if (departmentError) {
+        return res.status(400).json({ error: departmentError });
+      }
+
+      const seniorityId = parsed.role === "admin" ? null : parsed.seniority_id;
+      const seniorityError = await validateSeniority(parsed.role, seniorityId);
+      if (seniorityError) {
+        return res.status(400).json({ error: seniorityError });
+      }
+
       const updatedUser = await UserService.updateUser({
         id: userId,
         email: parsed.email.trim(),
         fullName: parsed.full_name.trim(),
         role: parsed.role,
         phone: parsed.phone ?? null,
+        departmentIds,
+        seniorityId,
       });
 
       if (!updatedUser) {

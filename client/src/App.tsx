@@ -11,6 +11,7 @@ import "./App.css";
 import { ChatBot } from "./components/ChatBot";
 import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import DepartmentManagementPage from "./pages/DepartmentManagementPage";
 import ShiftPage from "./pages/ShiftPage";
 import MySchedulePage from "./pages/MySchedulePage";
 import ScheduleReviewPage from "./pages/ScheduleReviewPage";
@@ -58,6 +59,7 @@ function App() {
 
   useEffect(() => {
     // כל מעבר עמוד סוגר את הסיידבר במובייל
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSidebarOpen(false);
   }, [location.pathname]);
 
@@ -117,6 +119,10 @@ function App() {
           <Route
             path="/users"
             element={session ? <UserManagementPage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/departments"
+            element={session ? <DepartmentManagementPage /> : <Navigate to="/login" replace />}
           />
           <Route
             path="/shifts"
