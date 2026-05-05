@@ -153,6 +153,7 @@ Copy from `server/.env.example` and set at least:
 - `SOLVER_REQUEST_TIMEOUT_MS` (optional, default in example: `60000`) – timeout for calls into the solver
 - `GOOGLE_CALENDAR_CLIENT_ID` / `GOOGLE_CALENDAR_CLIENT_SECRET` – OAuth 2.0 client credentials for Google Calendar sync
 - `GOOGLE_CALENDAR_REDIRECT_URI` – callback URL served by this API (`/api/calendar/google/callback`)
+- `GOOGLE_CALENDAR_WEBHOOK_URL` – **must be a public HTTPS URL** pointing to `/api/calendar/webhook` for Google push notifications. In local dev (HTTP localhost) push is skipped; use an HTTPS tunnel (e.g. ngrok/cloudflared) if you want push.
 - `GOOGLE_CALENDAR_STATE_SECRET` – secret used to sign and validate OAuth `state` payloads
 - `GOOGLE_CALENDAR_WEBHOOK_URL` – public URL Google can call for webhook notifications (`/api/calendar/webhook`)
 - `CALENDAR_TOKEN_ENCRYPTION_KEY` – 32-byte key (base64 or hex) used to encrypt refresh tokens and feed tokens at rest

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
+import axios from "axios";
 import { AuthService } from "../services/auth.service";
 import { useMySchedule } from "../hooks/useMySchedule";
 import { ViewModeTabs } from "../components/my-schedule/ViewModeTabs";
@@ -13,6 +14,21 @@ import {
   type CalendarStatus,
 } from "../services/calendar-sync.service";
 
+function describeSyncError(error: unknown): string {
+  if (!axios.isAxiosError(error)) {
+    return "שגיאה לא ידועה.";
+  }
+
+  const data = error.response?.data as unknown;
+  const serverError =
+    data && typeof data === "object" && "error" in data && typeof (data as { error?: unknown }).error === "string"
+      ? (data as { error: string }).error
+      : "";
+
+  if (serverError) return serverError;
+  return error.message || "שגיאה לא ידועה.";
+}
+
 export default function MySchedulePage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
@@ -20,6 +36,7 @@ export default function MySchedulePage() {
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState("");
+  const didAutoSyncRef = useRef(false);
 
   const statusLine = useMemo(() => {
     if (!calendarStatus) return "טוען סטטוס סנכרון...";
@@ -45,7 +62,8 @@ export default function MySchedulePage() {
         .catch(() => setCalendarMessage("שגיאה בטעינת סטטוס סנכרון יומן."));
     }
 
-    const onConnected = () => {
+    const onConnected = (event: MessageEvent) => {
+      if (event?.data?.type !== "planli:calendar-connected") return;
       setCalendarMessage("החיבור ל-Google Calendar הצליח.");
       void loadCalendarStatus();
     };
@@ -53,6 +71,29 @@ export default function MySchedulePage() {
     return () => window.removeEventListener("message", onConnected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!calendarStatus?.connected) return;
+    if (!s.displayWeekStart) return;
+    if (didAutoSyncRef.current) return;
+
+    didAutoSyncRef.current = true;
+    void (async () => {
+      try {
+        setCalendarBusy(true);
+        setCalendarMessage("");
+        await CalendarSyncService.syncOutbound(token, s.displayWeekStart);
+        setCalendarMessage("סונכרן אוטומטית ליומן Google.");
+        await loadCalendarStatus();
+      } catch (error) {
+        setCalendarMessage(`סנכרון אוטומטי נכשל: ${describeSyncError(error)}`);
+      } finally {
+        setCalendarBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, calendarStatus?.connected, s.displayWeekStart]);
 
   const onConnectGoogle = async () => {
     try {
@@ -73,10 +114,10 @@ export default function MySchedulePage() {
       setCalendarBusy(true);
       setCalendarMessage("");
       await CalendarSyncService.syncOutbound(token, s.displayWeekStart);
-      setCalendarMessage("הסידור פורסם וסונכרן ליומן Google.");
+      setCalendarMessage("סונכרן ליומן Google.");
       await loadCalendarStatus();
-    } catch {
-      setCalendarMessage("שגיאה בסנכרון השבוע הנוכחי.");
+    } catch (error) {
+      setCalendarMessage(`שגיאה בסנכרון השבוע הנוכחי: ${describeSyncError(error)}`);
     } finally {
       setCalendarBusy(false);
     }
@@ -119,6 +160,7 @@ export default function MySchedulePage() {
       setCalendarMessage("");
       await CalendarSyncService.disconnect(token);
       setCalendarMessage("החיבור ל-Google Calendar נותק.");
+      didAutoSyncRef.current = false;
       await loadCalendarStatus();
     } catch {
       setCalendarMessage("שגיאה בניתוק החיבור.");
@@ -138,58 +180,91 @@ export default function MySchedulePage() {
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">סנכרון יומן למכשיר</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900">Google Calendar</h2>
+                <span
+                  className={[
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+                    calendarStatus?.connected
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                      : "bg-slate-50 text-slate-600 ring-slate-200",
+                  ].join(" ")}
+                  aria-live="polite"
+                >
+                  {calendarStatus?.connected ? "מחובר" : "לא מחובר"}
+                </span>
+              </div>
               <p className="text-sm text-slate-500 mt-1">{statusLine}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={onConnectGoogle}
+                onClick={calendarStatus?.connected ? onDisconnect : onConnectGoogle}
                 disabled={calendarBusy}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                className={[
+                  "rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed",
+                  calendarStatus?.connected
+                    ? "border border-slate-300 text-slate-700 bg-white"
+                    : "bg-slate-900 text-white",
+                ].join(" ")}
               >
-                חבר Google Calendar
+                {calendarStatus?.connected ? "מנותק" : "חבר"}
               </button>
+
               <button
                 type="button"
                 onClick={onSyncWeek}
-                disabled={calendarBusy || !s.displayWeekStart}
+                disabled={calendarBusy || !calendarStatus?.connected || !s.displayWeekStart}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                סנכרן שבוע נוכחי
+                סנכרן עכשיו
               </button>
-              <button
-                type="button"
-                onClick={onCopyWebcal}
-                disabled={calendarBusy || !calendarStatus?.webcalUrl}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                העתק קישור WebCal
-              </button>
-              <button
-                type="button"
-                onClick={onRotateToken}
-                disabled={calendarBusy}
-                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                החלף קישור WebCal
-              </button>
-              <button
-                type="button"
-                onClick={onDisconnect}
-                disabled={calendarBusy || !calendarStatus?.connected}
-                className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                נתק חיבור
-              </button>
+
+              <details className="group">
+                <summary className="list-none rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-50 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">
+                  מתקדם
+                </summary>
+                <div className="mt-2 w-full sm:w-[360px] rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={onCopyWebcal}
+                      disabled={calendarBusy || !calendarStatus?.webcalUrl}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      העתק קישור WebCal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onRotateToken}
+                      disabled={calendarBusy}
+                      className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      החלף קישור WebCal
+                    </button>
+                    {calendarStatus?.webcalUrl ? (
+                      <p className="text-xs break-all text-slate-500">{calendarStatus.webcalUrl}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
-          {calendarStatus?.webcalUrl ? (
-            <p className="mt-3 text-xs break-all text-slate-500">{calendarStatus.webcalUrl}</p>
+          {calendarMessage ? (
+            <p
+              className="mt-3 text-sm text-slate-600"
+              aria-live="polite"
+              aria-busy={calendarBusy ? "true" : "false"}
+            >
+              {calendarBusy ? "מסנכרן..." : calendarMessage}
+            </p>
+          ) : calendarBusy ? (
+            <p className="mt-3 text-sm text-slate-600" aria-live="polite">
+              מסנכרן...
+            </p>
           ) : null}
-          {calendarMessage ? <p className="mt-3 text-sm text-slate-600">{calendarMessage}</p> : null}
         </section>
 
         <ViewModeTabs value={s.viewMode} onChange={s.setViewMode} />

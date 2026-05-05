@@ -41,6 +41,22 @@ function getWebhookUrl(): string {
   return value;
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function getWebhookUrlForPushOrNull(): string | null {
+  const value = process.env.GOOGLE_CALENDAR_WEBHOOK_URL?.trim();
+  if (!value) return null;
+  if (!isHttpsUrl(value)) return null;
+  return value;
+}
+
 function getWebcalBaseUrl(): string {
   const value = process.env.WEBCAL_BASE_URL?.trim();
   if (!value) {
@@ -137,12 +153,18 @@ export const CalendarSyncService = {
   },
 
   async registerWatchChannel(userId: string): Promise<void> {
+    const webhookAddress = getWebhookUrlForPushOrNull();
+    if (!webhookAddress) {
+      // Google Calendar "watch" requires a public HTTPS endpoint. In local dev we often run HTTP,
+      // so treat push as optional: user can still connect and manually sync outbound.
+      return;
+    }
     await GoogleTokenService.withValidAccessToken(userId, async (accessToken) => {
       const channelId = randomUUID();
       const watch = await GoogleCalendarClient.watchPrimaryCalendar({
         accessToken,
         channelId,
-        webhookAddress: getWebhookUrl(),
+        webhookAddress,
       });
 
       await CalendarIntegrationService.updateWatchChannel({
@@ -452,6 +474,10 @@ export const CalendarSyncService = {
     checked: number;
     renewed: number;
   }> {
+    const webhookAddress = getWebhookUrlForPushOrNull();
+    if (!webhookAddress) {
+      return { checked: 0, renewed: 0 };
+    }
     const expiring = await CalendarIntegrationService.listExpiringChannels(withinHours);
     let renewed = 0;
 
@@ -468,7 +494,7 @@ export const CalendarSyncService = {
         const watch = await GoogleCalendarClient.watchPrimaryCalendar({
           accessToken,
           channelId: randomUUID(),
-          webhookAddress: getWebhookUrl(),
+          webhookAddress,
         });
 
         await CalendarIntegrationService.updateWatchChannel({
