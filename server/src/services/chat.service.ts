@@ -332,7 +332,7 @@ export const ChatService = {
       `INSERT INTO users (id, email, full_name, role)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (id) DO NOTHING`,
-      [userId, `${emailLocalPart}@planli.local`, userId, "staff"],
+      [userId, `${emailLocalPart}@planli.local`, userId, "midwife"],
     );
   },
 
