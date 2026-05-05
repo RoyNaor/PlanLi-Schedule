@@ -26,6 +26,9 @@ Thumbs.db
 # Agent-local files
 .agent/
 .claude/
+agents/
+graphify-out/
+AGENTS.md
 
 # Repo-local git hooks
 .githooks/
