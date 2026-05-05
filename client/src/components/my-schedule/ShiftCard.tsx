@@ -1,5 +1,6 @@
-import { Stethoscope, UserRoundPlus, Moon } from "lucide-react";
+import { Moon } from "lucide-react";
 import { clsx } from "clsx";
+import { getRoleIcon, getRoleLabel } from "../../utils/staffing";
 import type { ScheduleAssignment } from "./types";
 
 function isOvernight(startTime: string, endTime: string) {
@@ -8,6 +9,7 @@ function isOvernight(startTime: string, endTime: string) {
 
 export function ScheduleShiftCard({ a }: { a: ScheduleAssignment }) {
   const overnight = isOvernight(a.startTime, a.endTime);
+  const Icon = getRoleIcon(a.userRole);
   return (
     <div
       className={clsx(
@@ -22,12 +24,8 @@ export function ScheduleShiftCard({ a }: { a: ScheduleAssignment }) {
         {overnight && <Moon className="w-2.5 h-2.5 inline ml-1 text-indigo-600" />}
       </p>
       <div className="flex items-center gap-1 mt-0.5 text-slate-500">
-        {a.userRole === "doctor" ? (
-          <Stethoscope className="w-2.5 h-2.5" />
-        ) : (
-          <UserRoundPlus className="w-2.5 h-2.5" />
-        )}
-        <span>{a.userRole === "doctor" ? "רופא" : "אחות"}</span>
+        <Icon className="w-2.5 h-2.5" />
+        <span>{getRoleLabel(a.userRole)}</span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import { Moon, Pencil, Stethoscope, Trash2, UserRoundPlus } from "lucide-react";
+import { Moon, Pencil, Trash2 } from "lucide-react";
+import { getNonZeroStaffingSummary } from "../../utils/staffing";
 import type { Shift } from "../types";
 
 type Props = {
@@ -13,6 +14,7 @@ function isOvernightShift(startTime: string, endTime: string): boolean {
 
 export default function ShiftCard({ shift, onEdit, onDelete }: Props) {
   const overnight = isOvernightShift(shift.startTime, shift.endTime);
+  const staffingSummary = getNonZeroStaffingSummary(shift);
 
   return (
     <article
@@ -36,15 +38,16 @@ export default function ShiftCard({ shift, onEdit, onDelete }: Props) {
         )}
       </div>
 
-      <div className="space-y-0.5 text-slate-500">
-        <p className="flex items-center gap-1">
-          <Stethoscope className="w-3 h-3" />
-          רופאים: {shift.minDoctors}
-        </p>
-        <p className="flex items-center gap-1">
-          <UserRoundPlus className="w-3 h-3" />
-          אחיות: {shift.minNurses}
-        </p>
+      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-500">
+        {staffingSummary.length === 0 ? (
+          <p className="col-span-2">אין דרישות צוות</p>
+        ) : (
+          staffingSummary.map((field) => (
+            <p key={field.field} className="truncate">
+              {field.label}: {field.value}
+            </p>
+          ))
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-0.5 pt-0.5">

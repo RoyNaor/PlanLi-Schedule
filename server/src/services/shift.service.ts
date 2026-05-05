@@ -10,6 +10,13 @@ interface ShiftRow {
   end_time: string;
   min_doctors: number;
   min_nurses: number;
+  min_midwives: number;
+  min_obgyns: number;
+  min_anesthesiologists: number;
+  min_orderlies: number;
+  min_pediatricians: number;
+  min_shabbat_scribes: number;
+  min_secretaries: number;
   created_at: Date;
 }
 
@@ -37,6 +44,13 @@ interface CreateShiftInput {
   endTime: string;
   minDoctors: number;
   minNurses: number;
+  minMidwives: number;
+  minObgyns: number;
+  minAnesthesiologists: number;
+  minOrderlies: number;
+  minPediatricians: number;
+  minShabbatScribes: number;
+  minSecretaries: number;
 }
 
 interface UpdateShiftInput {
@@ -45,6 +59,13 @@ interface UpdateShiftInput {
   endTime: string;
   minDoctors: number;
   minNurses: number;
+  minMidwives: number;
+  minObgyns: number;
+  minAnesthesiologists: number;
+  minOrderlies: number;
+  minPediatricians: number;
+  minShabbatScribes: number;
+  minSecretaries: number;
 }
 
 interface DuplicateWeekShiftsInput {
@@ -79,6 +100,13 @@ export interface Shift {
   endTime: string;
   minDoctors: number;
   minNurses: number;
+  minMidwives: number;
+  minObgyns: number;
+  minAnesthesiologists: number;
+  minOrderlies: number;
+  minPediatricians: number;
+  minShabbatScribes: number;
+  minSecretaries: number;
   createdAt: string;
 }
 
@@ -114,6 +142,13 @@ function mapShift(row: ShiftRow): Shift {
     endTime: row.end_time,
     minDoctors: row.min_doctors,
     minNurses: row.min_nurses,
+    minMidwives: row.min_midwives,
+    minObgyns: row.min_obgyns,
+    minAnesthesiologists: row.min_anesthesiologists,
+    minOrderlies: row.min_orderlies,
+    minPediatricians: row.min_pediatricians,
+    minShabbatScribes: row.min_shabbat_scribes,
+    minSecretaries: row.min_secretaries,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -158,7 +193,9 @@ export const ShiftService = {
   async getShiftById(shiftId: number): Promise<Shift | null> {
     const result = await queryDatabase<ShiftRow>(
       `SELECT id, week_start::text AS week_start, shift_date::text AS shift_date,
-              start_time, end_time, min_doctors, min_nurses, created_at
+              start_time, end_time, min_doctors, min_nurses, min_midwives,
+              min_obgyns, min_anesthesiologists, min_orderlies, min_pediatricians,
+              min_shabbat_scribes, min_secretaries, created_at
        FROM shifts
        WHERE id = $1`,
       [shiftId],
@@ -301,10 +338,16 @@ export const ShiftService = {
     await this.ensureWeek(input.weekStart);
 
     const result = await queryDatabase<ShiftRow>(
-      `INSERT INTO shifts (week_start, shift_date, start_time, end_time, min_doctors, min_nurses)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO shifts (
+         week_start, shift_date, start_time, end_time, min_doctors, min_nurses,
+         min_midwives, min_obgyns, min_anesthesiologists, min_orderlies,
+         min_pediatricians, min_shabbat_scribes, min_secretaries
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
-                 start_time, end_time, min_doctors, min_nurses, created_at`,
+                 start_time, end_time, min_doctors, min_nurses, min_midwives,
+                 min_obgyns, min_anesthesiologists, min_orderlies, min_pediatricians,
+                 min_shabbat_scribes, min_secretaries, created_at`,
       [
         input.weekStart,
         input.shiftDate,
@@ -312,6 +355,13 @@ export const ShiftService = {
         input.endTime,
         input.minDoctors,
         input.minNurses,
+        input.minMidwives,
+        input.minObgyns,
+        input.minAnesthesiologists,
+        input.minOrderlies,
+        input.minPediatricians,
+        input.minShabbatScribes,
+        input.minSecretaries,
       ],
     );
 
@@ -325,10 +375,19 @@ export const ShiftService = {
            start_time = $3,
            end_time = $4,
            min_doctors = $5,
-           min_nurses = $6
+           min_nurses = $6,
+           min_midwives = $7,
+           min_obgyns = $8,
+           min_anesthesiologists = $9,
+           min_orderlies = $10,
+           min_pediatricians = $11,
+           min_shabbat_scribes = $12,
+           min_secretaries = $13
        WHERE id = $1
        RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
-                 start_time, end_time, min_doctors, min_nurses, created_at`,
+                 start_time, end_time, min_doctors, min_nurses, min_midwives,
+                 min_obgyns, min_anesthesiologists, min_orderlies, min_pediatricians,
+                 min_shabbat_scribes, min_secretaries, created_at`,
       [
         shiftId,
         input.shiftDate,
@@ -336,6 +395,13 @@ export const ShiftService = {
         input.endTime,
         input.minDoctors,
         input.minNurses,
+        input.minMidwives,
+        input.minObgyns,
+        input.minAnesthesiologists,
+        input.minOrderlies,
+        input.minPediatricians,
+        input.minShabbatScribes,
+        input.minSecretaries,
       ],
     );
 
@@ -372,7 +438,9 @@ export const ShiftService = {
   async listShiftsByWeek(weekStart: string): Promise<Shift[]> {
     const result = await queryDatabase<ShiftRow>(
       `SELECT id, week_start::text AS week_start, shift_date::text AS shift_date,
-              start_time, end_time, min_doctors, min_nurses, created_at
+              start_time, end_time, min_doctors, min_nurses, min_midwives,
+              min_obgyns, min_anesthesiologists, min_orderlies, min_pediatricians,
+              min_shabbat_scribes, min_secretaries, created_at
        FROM shifts
        WHERE week_start = $1
        ORDER BY shift_date ASC, start_time ASC`,
@@ -401,17 +469,30 @@ export const ShiftService = {
     }
 
     const insertResult = await queryDatabase<ShiftRow>(
-      `INSERT INTO shifts (week_start, shift_date, start_time, end_time, min_doctors, min_nurses)
+      `INSERT INTO shifts (
+         week_start, shift_date, start_time, end_time, min_doctors, min_nurses,
+         min_midwives, min_obgyns, min_anesthesiologists, min_orderlies,
+         min_pediatricians, min_shabbat_scribes, min_secretaries
+       )
        SELECT $2::date AS week_start,
               ($2::date + (s.shift_date - $1::date))::date AS shift_date,
               s.start_time,
               s.end_time,
               s.min_doctors,
-              s.min_nurses
+              s.min_nurses,
+              s.min_midwives,
+              s.min_obgyns,
+              s.min_anesthesiologists,
+              s.min_orderlies,
+              s.min_pediatricians,
+              s.min_shabbat_scribes,
+              s.min_secretaries
        FROM shifts s
        WHERE s.week_start = $1
        RETURNING id, week_start::text AS week_start, shift_date::text AS shift_date,
-                 start_time, end_time, min_doctors, min_nurses, created_at`,
+                 start_time, end_time, min_doctors, min_nurses, min_midwives,
+                 min_obgyns, min_anesthesiologists, min_orderlies, min_pediatricians,
+                 min_shabbat_scribes, min_secretaries, created_at`,
       [input.sourceWeekStart, input.targetWeekStart],
     );
 
