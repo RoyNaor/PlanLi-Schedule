@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { Link, Navigate } from "react-router-dom";
-import { BrainCircuit, CheckCircle2, Eye, Lock, XCircle } from "lucide-react";
+import { Navigate } from "react-router-dom";
+import {
+  BadgeCheck,
+  BrainCircuit,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  History,
+  Lock,
+  Pencil,
+  Send,
+  X,
+  XCircle,
+} from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner } from "../components/ui/LoadingIndicator";
 import { staffingFields, type StaffingField } from "../utils/staffing";
@@ -11,6 +23,7 @@ import WeekPickerModal from "../components/shifts/WeekPickerModal";
 import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
 import DuplicateWeekModal from "../components/shifts/DuplicateWeekModal";
 import CollectionDeadlineModal from "../components/shifts/CollectionDeadlineModal";
+import type { ShiftAssignmentEntry } from "../components/shifts/ScheduleShiftCard";
 
 import type { Shift, WeekStatus, WeekSummary } from "../components/types";
 import ShiftFormModal from "../components/shifts/ShiftFormModal";
@@ -76,6 +89,31 @@ export default function ShiftPage() {
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
+
+  const [scheduleAssignments, setScheduleAssignments] = useState<
+    Record<number, ShiftAssignmentEntry[]>
+  >({});
+
+  type VersionSummary = {
+    id: string;
+    versionNumber: number;
+    isPublished: boolean;
+    createdAt: string;
+    assignmentCount: number;
+    solverMeta: Record<string, unknown> | null;
+  };
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Manual edit state for resolved schedule
+  const [editMode, setEditMode] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [addSelections, setAddSelections] = useState<Record<number, string>>({});
+  const [allStaff, setAllStaff] = useState<
+    { id: string; full_name: string; role: string }[]
+  >([]);
 
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [shiftModalMode, setShiftModalMode] = useState<"create" | "edit">("create");
@@ -196,6 +234,155 @@ export default function ShiftPage() {
     else setShifts([]);
   }, [selectedWeek, fetchShifts]);
 
+  const fetchVersionDetail = useCallback(
+    async (versionId: string) => {
+      if (!versionId) {
+        setScheduleAssignments({});
+        return;
+      }
+      try {
+        const detailRes = await axios.get<{
+          version: { assignments: (ShiftAssignmentEntry & { shiftId: number })[] };
+        }>(`${API_BASE}/schedule-versions/${versionId}`, { headers: authHeaders });
+        const map: Record<number, ShiftAssignmentEntry[]> = {};
+        for (const a of detailRes.data.version.assignments ?? []) {
+          const list = map[a.shiftId] ?? [];
+          list.push({
+            userId: a.userId,
+            userFullName: a.userFullName,
+            userRole: a.userRole,
+            source: a.source,
+          });
+          map[a.shiftId] = list;
+        }
+        setScheduleAssignments(map);
+      } catch {
+        setScheduleAssignments({});
+      }
+    },
+    [authHeaders],
+  );
+
+  const fetchVersions = useCallback(
+    async (weekStart: string, options: { keepSelection?: boolean } = {}) => {
+      if (!token || !weekStart) return;
+      try {
+        const listRes = await axios.get<{ versions: VersionSummary[] }>(
+          `${API_BASE}/weeks/${weekStart}/schedule-versions`,
+          { headers: authHeaders },
+        );
+        const items = listRes.data.versions ?? [];
+        setVersions(items);
+
+        const next = options.keepSelection
+          ? selectedVersionId && items.some((v) => v.id === selectedVersionId)
+            ? selectedVersionId
+            : items[0]?.id ?? ""
+          : items[0]?.id ?? "";
+        setSelectedVersionId(next);
+        if (next) await fetchVersionDetail(next);
+        else setScheduleAssignments({});
+      } catch {
+        setVersions([]);
+        setSelectedVersionId("");
+        setScheduleAssignments({});
+      }
+    },
+    [authHeaders, fetchVersionDetail, selectedVersionId, token],
+  );
+
+  const fetchAllStaff = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get<{ id: string; full_name: string; role: string }[]>(
+        `${API_BASE}/users`,
+        { headers: authHeaders },
+      );
+      setAllStaff(res.data.filter((u) => u.role === "doctor" || u.role === "nurse"));
+    } catch {
+      // non-critical
+    }
+  }, [authHeaders, token]);
+
+  const handleEnterEditMode = useCallback(() => {
+    void fetchAllStaff();
+    setEditMode(true);
+    setAddSelections({});
+  }, [fetchAllStaff]);
+
+  const handleRemoveAssignment = useCallback(
+    async (shiftId: number, userId: string) => {
+      if (!selectedVersionId) return;
+      setSavingEdit(true);
+      try {
+        await axios.delete(
+          `${API_BASE}/schedule-versions/${selectedVersionId}/assignments/${shiftId}/${userId}`,
+          { headers: authHeaders },
+        );
+        await fetchVersionDetail(selectedVersionId);
+      } catch (e: any) {
+        alert(`שגיאה בהסרת שיבוץ: ${e.response?.data?.error ?? "Unknown error"}`);
+      } finally {
+        setSavingEdit(false);
+      }
+    },
+    [authHeaders, fetchVersionDetail, selectedVersionId],
+  );
+
+  const handleAddAssignment = useCallback(
+    async (shiftId: number) => {
+      const userId = addSelections[shiftId];
+      if (!selectedVersionId || !userId) return;
+      setSavingEdit(true);
+      try {
+        await axios.post(
+          `${API_BASE}/schedule-versions/${selectedVersionId}/assignments`,
+          { shift_id: shiftId, user_id: userId },
+          { headers: authHeaders },
+        );
+        setAddSelections((prev) => ({ ...prev, [shiftId]: "" }));
+        await fetchVersionDetail(selectedVersionId);
+      } catch (e: any) {
+        alert(`שגיאה בהוספת שיבוץ: ${e.response?.data?.error ?? "Unknown error"}`);
+      } finally {
+        setSavingEdit(false);
+      }
+    },
+    [addSelections, authHeaders, fetchVersionDetail, selectedVersionId],
+  );
+
+  const handlePublish = useCallback(async () => {
+    if (!selectedVersionId) return;
+    setPublishing(true);
+    try {
+      await axios.post(
+        `${API_BASE}/schedule-versions/${selectedVersionId}/publish`,
+        {},
+        { headers: authHeaders },
+      );
+      await fetchVersions(selectedWeek, { keepSelection: true });
+    } catch (e: any) {
+      alert(`שגיאה בפרסום: ${e.response?.data?.error ?? "Unknown error"}`);
+    } finally {
+      setPublishing(false);
+    }
+  }, [authHeaders, fetchVersions, selectedVersionId, selectedWeek]);
+
+  const handleSelectVersion = useCallback(
+    async (versionId: string) => {
+      setSelectedVersionId(versionId);
+      setEditMode(false);
+      setAddSelections({});
+      await fetchVersionDetail(versionId);
+      setHistoryOpen(false);
+    },
+    [fetchVersionDetail],
+  );
+
+  const handleSetAddSelection = useCallback((shiftId: number, userId: string) => {
+    setAddSelections((prev) => ({ ...prev, [shiftId]: userId }));
+  }, []);
+
   const weekDates = useMemo(
     () => (selectedWeek ? getWeekDates(selectedWeek) : []),
     [selectedWeek],
@@ -218,6 +405,20 @@ export default function ShiftPage() {
     () => weeks.find((week) => week.weekStart === selectedWeek) ?? null,
     [selectedWeek, weeks],
   );
+
+  useEffect(() => {
+    const status = selectedWeekSummary?.status;
+    if (status === "SOLVED" || status === "PUBLISHED") {
+      void fetchVersions(selectedWeek);
+    } else {
+      setVersions([]);
+      setSelectedVersionId("");
+      setScheduleAssignments({});
+    }
+    setEditMode(false);
+    setAddSelections({});
+    setHistoryOpen(false);
+  }, [selectedWeek, selectedWeekSummary?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedWeekDeadlineLabel = useMemo(() => {
     const deadline = selectedWeekSummary?.collectionDeadline;
@@ -624,16 +825,60 @@ export default function ShiftPage() {
                 </button>
               )}
 
-              {selectedWeekSummary && (selectedWeekSummary.status === "SOLVED" ||
-                selectedWeekSummary.status === "PUBLISHED") && (
-                <Link
-                  to="/review"
-                  className="h-8 px-3 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-3 h-3" />
-                  סקירה
-                </Link>
+              {selectedVersionId && (
+                editMode ? (
+                  <button
+                    type="button"
+                    onClick={() => { setEditMode(false); setAddSelections({}); }}
+                    disabled={savingEdit}
+                    className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    {savingEdit ? (
+                      <LoadingSpinner className="w-3 h-3 text-[#1d5c8b]" />
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3 text-[#1d5c8b]" />
+                    )}
+                    סיים עריכה
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleEnterEditMode}
+                    className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    עריכה ידנית
+                  </button>
+                )
               )}
+
+              {versions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen(true)}
+                  className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <History className="w-3 h-3" />
+                  היסטוריה
+                </button>
+              )}
+
+              {selectedVersionId && (
+                <button
+                  type="button"
+                  onClick={() => void handlePublish()}
+                  disabled={publishing}
+                  className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 inline-flex items-center gap-1.5 transition-colors"
+                >
+                  {publishing ? (
+                    <LoadingSpinner className="w-3 h-3" />
+                  ) : (
+                    <Send className="w-3 h-3" />
+                  )}
+                  {publishing ? "מפרסם..." : "פרסם"}
+                </button>
+              )}
+
             </div>
           </div>
 
@@ -664,11 +909,6 @@ export default function ShiftPage() {
                 {activeSolveRun.status === "FAILED" &&
                   `נכשל: ${activeSolveRun.errorMessage ?? "שגיאה לא ידועה"}`}
               </span>
-              {activeSolveRun.status === "SUCCEEDED" && (
-                <Link to="/review" className="font-semibold underline underline-offset-2 shrink-0">
-                  לסקירה
-                </Link>
-              )}
             </div>
           )}
         </section>
@@ -714,6 +954,14 @@ export default function ShiftPage() {
           weekDates={weekDates}
           shifts={shifts}
           loading={loadingShifts}
+          scheduleAssignments={scheduleAssignments}
+          editMode={editMode}
+          savingEdit={savingEdit}
+          allStaff={allStaff}
+          addSelections={addSelections}
+          onSelectAddUser={handleSetAddSelection}
+          onAddAssignment={handleAddAssignment}
+          onRemoveAssignment={handleRemoveAssignment}
           onAddShift={handleAddShift}
           onEditShift={handleEditShift}
           onDeleteShift={handleDeleteShift}
@@ -725,6 +973,111 @@ export default function ShiftPage() {
           </p>
         )}
       </div>
+
+      {historyOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+          onClick={() => setHistoryOpen(false)}
+        >
+          <div
+            className="w-full max-w-md max-h-[80vh] flex flex-col bg-white rounded-2xl shadow-xl border border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-900 inline-flex items-center gap-2">
+                <History className="w-4 h-4 text-[#1d5c8b]" />
+                היסטוריית גרסאות ({versions.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-2">
+              {versions.length === 0 ? (
+                <p className="text-sm text-slate-500 px-2 py-4 text-center">
+                  אין גרסאות לשבוע זה.
+                </p>
+              ) : (
+                versions.map((version) => {
+                  const isSelected = selectedVersionId === version.id;
+                  const violations =
+                    typeof version.solverMeta?.soft_violations === "number"
+                      ? version.solverMeta.soft_violations
+                      : null;
+                  const wallTime =
+                    typeof version.solverMeta?.wall_time_seconds === "number"
+                      ? version.solverMeta.wall_time_seconds
+                      : null;
+                  const isOptimal = version.solverMeta?.solver_status === "optimal";
+                  return (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => void handleSelectVersion(version.id)}
+                      className={`w-full text-right rounded-xl border p-3 transition-all ${
+                        isSelected
+                          ? "border-[#1d5c8b]/40 bg-[#ebf4fb]/40 ring-1 ring-[#ebf4fb]"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-sm font-semibold ${isSelected ? "text-[#1d5c8b]" : "text-slate-800"}`}>
+                          גרסה #{version.versionNumber}
+                        </p>
+                        {version.isPublished && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-[#ebf4fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d5c8b]">
+                            <BadgeCheck className="w-2.5 h-2.5" />
+                            פעילה
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {version.assignmentCount} שיבוצים · {dateTimeFormatter.format(new Date(version.createdAt))}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {violations !== null && (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              violations === 0
+                                ? "bg-[#ebf4fb] text-[#1d5c8b]"
+                                : violations <= 2
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {violations === 0 ? (
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                            ) : (
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                            )}
+                            {violations === 0 ? "ללא הפרות" : `${violations} הפרות`}
+                          </span>
+                        )}
+                        {isOptimal && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            אופטימלי
+                          </span>
+                        )}
+                        {wallTime !== null && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+                            <Clock className="w-2.5 h-2.5" />
+                            {wallTime.toFixed(1)} שנ׳
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

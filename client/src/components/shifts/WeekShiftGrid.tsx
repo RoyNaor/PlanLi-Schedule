@@ -2,12 +2,23 @@ import { getJerusalemTodayIsoDate, parseIsoDateToUtc } from "../../utils/date.ut
 import type { Shift } from "../types";
 import { LoadingState } from "../ui/LoadingIndicator";
 import ShiftCard from "./ShiftCard";
+import ScheduleShiftCard, { type ShiftAssignmentEntry } from "./ScheduleShiftCard";
+
+type StaffOption = { id: string; full_name: string; role: string };
 
 type Props = {
   weekStart: string;
   weekDates: string[];
   shifts: Shift[];
   loading?: boolean;
+  scheduleAssignments?: Record<number, ShiftAssignmentEntry[]>;
+  editMode?: boolean;
+  savingEdit?: boolean;
+  allStaff?: StaffOption[];
+  addSelections?: Record<number, string>;
+  onSelectAddUser?: (shiftId: number, userId: string) => void;
+  onAddAssignment?: (shiftId: number) => void;
+  onRemoveAssignment?: (shiftId: number, userId: string) => void;
   onAddShift: (shiftDate: string) => void;
   onEditShift: (shift: Shift) => void;
   onDeleteShift: (shiftId: number) => void;
@@ -27,6 +38,14 @@ export default function WeekShiftGrid({
   weekDates,
   shifts,
   loading = false,
+  scheduleAssignments,
+  editMode = false,
+  savingEdit = false,
+  allStaff,
+  addSelections,
+  onSelectAddUser,
+  onAddAssignment,
+  onRemoveAssignment,
   onAddShift,
   onEditShift,
   onDeleteShift,
@@ -104,14 +123,37 @@ export default function WeekShiftGrid({
                   </button>
 
                   <div className="space-y-1.5">
-                    {dayShifts.map((shift) => (
-                      <ShiftCard
-                        key={shift.id}
-                        shift={shift}
-                        onEdit={onEditShift}
-                        onDelete={onDeleteShift}
-                      />
-                    ))}
+                    {dayShifts.map((shift) => {
+                      const assignments = scheduleAssignments?.[shift.id];
+                      if (assignments && assignments.length > 0) {
+                        const assignedUserIds = new Set(assignments.map((a) => a.userId));
+                        const availableStaff = (allStaff ?? []).filter(
+                          (s) => !assignedUserIds.has(s.id),
+                        );
+                        return (
+                          <ScheduleShiftCard
+                            key={shift.id}
+                            shift={shift}
+                            assignments={assignments}
+                            editMode={editMode}
+                            saving={savingEdit}
+                            availableStaff={availableStaff}
+                            selectedAddUserId={addSelections?.[shift.id] ?? ""}
+                            onSelectAddUser={onSelectAddUser}
+                            onAddAssignment={onAddAssignment}
+                            onRemoveAssignment={onRemoveAssignment}
+                          />
+                        );
+                      }
+                      return (
+                        <ShiftCard
+                          key={shift.id}
+                          shift={shift}
+                          onEdit={onEditShift}
+                          onDelete={onDeleteShift}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               );

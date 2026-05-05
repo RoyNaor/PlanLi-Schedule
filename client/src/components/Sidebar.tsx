@@ -115,7 +115,7 @@ export default function Sidebar({
                 onClick={() => handleNavigate("/review")}
               >
                 <CalendarDays size={18} />
-                <span>סקירה וניהול סידור</span>
+                <span>מגבלות עובדים</span>
               </button>
             </>
           ) : null}
