@@ -151,6 +151,13 @@ Copy from `server/.env.example` and set at least:
 - `SOLVER_SERVICE_URL` – base URL of the Python solver, for example `http://localhost:8080`
 - `SOLVER_SERVICE_API_KEY` (optional) – if set, the Node server **adds** an `x-api-key` header on outbound calls to the solver. The **checked-in** `solver/solver_service.py` does **not** validate that header; use this only with a sidecar, reverse proxy, or if you extend the Python service to enforce it
 - `SOLVER_REQUEST_TIMEOUT_MS` (optional, default in example: `60000`) – timeout for calls into the solver
+- `GOOGLE_CALENDAR_CLIENT_ID` / `GOOGLE_CALENDAR_CLIENT_SECRET` – OAuth 2.0 client credentials for Google Calendar sync
+- `GOOGLE_CALENDAR_REDIRECT_URI` – callback URL served by this API (`/api/calendar/google/callback`)
+- `GOOGLE_CALENDAR_STATE_SECRET` – secret used to sign and validate OAuth `state` payloads
+- `GOOGLE_CALENDAR_WEBHOOK_URL` – public URL Google can call for webhook notifications (`/api/calendar/webhook`)
+- `CALENDAR_TOKEN_ENCRYPTION_KEY` – 32-byte key (base64 or hex) used to encrypt refresh tokens and feed tokens at rest
+- `WEBCAL_BASE_URL` – public base URL used when generating user WebCal feed links
+- `CALENDAR_CHANNEL_RENEWAL_WINDOW_HOURS` (optional, default `48`) – renewal window for expiring webhook channels
 
 **Security:** never commit real secrets (environment files with production keys, Firebase service account JSON, or similar). Use local env files and secret management appropriate to your environment.
 
@@ -211,6 +218,15 @@ python solver_service.py
 ```
 
 The solver listens on `http://localhost:8080` (see `solver/solver_service.py`). Point `SOLVER_SERVICE_URL` at that base URL in `server/.env`.
+
+**6. Calendar channel renewal job** (recommended if Google Calendar sync is enabled)
+
+```bash
+cd server
+npm run calendar:renew-channels
+```
+
+Run this command daily via cron/scheduler in production so expiring Google webhook channels are re-registered.
 
 ---
 
@@ -275,6 +291,7 @@ For payload shape and example JSON, use `solver/README.md` in this repository (i
 | ---- | --------------------------------------- |
 | **Server** unit tests | `cd server && npm test` (uses Node’s test runner, see `server/package.json`) |
 | **Server** typecheck | `cd server && npm run typecheck` |
+| **Server** calendar channel renewal check | `cd server && npm run calendar:renew-channels` |
 | **Client** typecheck | `cd client && npm run typecheck` |
 | **Client** lint | `cd client && npm run lint` |
 | **Solver** | `cd solver && python -m unittest test_solver_service` |
