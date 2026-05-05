@@ -333,10 +333,27 @@ export const ChatService = {
     const emailLocalPart = userId.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "user";
 
     await queryDatabase(
-      `INSERT INTO users (id, email, full_name, role)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (id, email, full_name, role, seniority_id)
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         (SELECT id FROM seniorities WHERE code = 'regular' LIMIT 1)
+       )
        ON CONFLICT (id) DO NOTHING`,
       [userId, `${emailLocalPart}@planli.local`, userId, "midwife"],
+    );
+
+    await queryDatabase(
+      `INSERT INTO user_departments (user_id, department_id)
+       SELECT u.id, d.id
+       FROM users u
+       INNER JOIN departments d ON d.code = 'default'
+       WHERE u.id = $1
+         AND u.role <> 'admin'
+       ON CONFLICT (user_id, department_id) DO NOTHING`,
+      [userId],
     );
   },
 
