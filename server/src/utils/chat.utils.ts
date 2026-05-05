@@ -95,6 +95,36 @@ const scheduleQueryPatterns = [
   "משמרות שלי",
 ];
 
+const scheduleQueryNouns = [
+  "סידור",
+  "משמר",
+  "שיבוצ",
+];
+
+const scheduleQueryUserMarkers = [
+  "לי",
+  "שלי",
+];
+
+const scheduleQueryActionMarkers = [
+  "אילו",
+  "איזה",
+  "בדוק",
+  "בדקי",
+  "בדיקה",
+  "הראה",
+  "הראי",
+  "יש",
+  "כמה",
+  "מה",
+  "קיימים",
+  "קיימות",
+  "תבדוק",
+  "תבדקי",
+  "תראה",
+  "תראי",
+];
+
 function normalizeChatText(input: string): string {
   return input
     .trim()
@@ -221,7 +251,14 @@ export function getLocalChatReply(input: string): string | null {
 export function detectScheduleQueryRange(input: string): ScheduleQueryRange | null {
   const normalized = normalizeChatText(input);
 
-  const asksForSchedule = scheduleQueryPatterns.some((pattern) => normalized.includes(pattern));
+  const asksForSchedule =
+    scheduleQueryPatterns.some((pattern) => normalized.includes(pattern)) ||
+    (
+      scheduleQueryNouns.some((noun) => normalized.includes(noun)) &&
+      scheduleQueryUserMarkers.some((marker) => normalized.split(" ").includes(marker)) &&
+      scheduleQueryActionMarkers.some((marker) => normalized.includes(marker))
+    );
+
   if (!asksForSchedule) {
     return null;
   }
