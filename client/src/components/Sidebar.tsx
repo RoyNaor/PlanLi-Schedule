@@ -1,5 +1,7 @@
 import {
   CalendarDays,
+  ChevronsLeft,
+  ChevronsRight,
   LogIn,
   LogOut,
   MessageCircle,
@@ -9,20 +11,24 @@ import {
 
 type SidebarProps = {
   open: boolean;
+  collapsed: boolean;
   currentPath: string;
   hasSession: boolean;
   isAdmin: boolean;
   onClose: () => void;
+  onToggleCollapse: () => void;
   onNavigate: (path: string) => void;
   onAuthAction: () => void;
 };
 
 export default function Sidebar({
   open,
+  collapsed,
   currentPath,
   hasSession,
   isAdmin,
   onClose,
+  onToggleCollapse,
   onNavigate,
   onAuthAction,
 }: SidebarProps) {
@@ -48,7 +54,7 @@ export default function Sidebar({
       ) : null}
 
       <aside
-        className={`sidebar ${open ? "is-open" : ""}`}
+        className={`sidebar ${open ? "is-open" : ""} ${collapsed ? "is-collapsed" : ""}`}
         aria-label="Sidebar menu"
       >
         <div className="sidebar-top">
@@ -59,6 +65,16 @@ export default function Sidebar({
               <div className="sidebar-subtitle">Scheduling Assistant</div>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="sidebar-collapse"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
+            title={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
+          >
+            {collapsed ? <ChevronsLeft size={18} /> : <ChevronsRight size={18} />}
+          </button>
 
           <button
             type="button"
@@ -75,6 +91,7 @@ export default function Sidebar({
             type="button"
             className={`sidebar-link ${currentPath === "/chat" ? "is-active" : ""}`}
             onClick={() => handleNavigate("/chat")}
+            title="צ'אט"
           >
             <MessageCircle size={18} />
             <span>צ'אט</span>
@@ -84,6 +101,7 @@ export default function Sidebar({
             type="button"
             className={`sidebar-link ${currentPath === "/schedule" ? "is-active" : ""}`}
             onClick={() => handleNavigate("/schedule")}
+            title="השיבוץ השבועי שלי"
           >
             <CalendarDays size={18} />
             <span>השיבוץ השבועי שלי </span>
@@ -95,6 +113,7 @@ export default function Sidebar({
                 type="button"
                 className={`sidebar-link ${currentPath === "/users" ? "is-active" : ""}`}
                 onClick={() => handleNavigate("/users")}
+                title="ניהול משתמשים"
               >
                 <ShieldUser size={18} />
                 <span>ניהול משתמשים</span>
@@ -104,6 +123,7 @@ export default function Sidebar({
                 type="button"
                 className={`sidebar-link ${currentPath === "/shifts" ? "is-active" : ""}`}
                 onClick={() => handleNavigate("/shifts")}
+                title="ניהול משמרות"
               >
                 <CalendarDays size={18} />
                 <span>ניהול משמרות </span>
@@ -113,6 +133,7 @@ export default function Sidebar({
                 type="button"
                 className={`sidebar-link ${currentPath === "/review" ? "is-active" : ""}`}
                 onClick={() => handleNavigate("/review")}
+                title="מגבלות עובדים"
               >
                 <CalendarDays size={18} />
                 <span>מגבלות עובדים</span>
@@ -126,6 +147,7 @@ export default function Sidebar({
             type="button"
             className="sidebar-auth"
             onClick={handleAuthAction}
+            title={hasSession ? "התנתקות" : "התחברות"}
           >
             {hasSession ? <LogOut size={18} /> : <LogIn size={18} />}
             <span>{hasSession ? "התנתקות" : "התחברות"}</span>

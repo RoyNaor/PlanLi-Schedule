@@ -32,11 +32,16 @@ body {
   grid-template-areas: "sidebar content";
   position: relative;
   overflow: hidden;
+  transition: grid-template-columns 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-layout.is-login {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "content";
+}
+
+.app-layout.is-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 .app-content {
@@ -60,6 +65,7 @@ body {
   grid-area: sidebar;
   height: 100vh;
   overflow: hidden;
+  transition: width 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Two-tone: navy brand band */
@@ -81,29 +87,28 @@ body {
 }
 
 .sidebar-logo {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background-image: url("/planli-logo.png");
+  background-size: 175%;
+  background-position: center;
+  background-repeat: no-repeat;
   flex-shrink: 0;
-}
-
-.sidebar-logo::after {
-  content: "PL";
-  font-weight: 800;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  color: #ffffff;
 }
 
 .sidebar-brand-text {
   display: grid;
   gap: 0.1rem;
   min-width: 0;
+  overflow: hidden;
+  max-width: 200px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    max-width 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease,
+    transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-title {
@@ -135,6 +140,130 @@ body {
   justify-content: center;
 }
 
+.sidebar-collapse {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 180ms ease,
+    transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms ease;
+}
+
+.sidebar-collapse:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.05);
+}
+
+.sidebar-collapse:active {
+  transform: scale(0.94);
+}
+
+.sidebar-collapse svg {
+  transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Collapsed sidebar — animated label fade/slide */
+.sidebar-link span,
+.sidebar-auth span {
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 200px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    max-width 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    margin 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar.is-collapsed .sidebar-brand-text {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+.sidebar.is-collapsed .sidebar-link span,
+.sidebar.is-collapsed .sidebar-auth span {
+  max-width: 0;
+  width: 0;
+  opacity: 0;
+  transform: translateX(8px);
+  margin: 0;
+}
+
+.sidebar.is-collapsed .sidebar-top {
+  padding: 1.1rem 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.is-collapsed .sidebar-brand {
+  display: none;
+}
+
+.sidebar.is-collapsed .sidebar-collapse {
+  width: 36px;
+  height: 36px;
+  margin-inline-start: 0;
+}
+
+.sidebar.is-collapsed .sidebar-link,
+.sidebar.is-collapsed .sidebar-auth {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  gap: 0;
+  width: 42px;
+  height: 42px;
+  justify-self: center;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  border-radius: 11px;
+}
+
+.sidebar.is-collapsed .sidebar-nav {
+  justify-items: center;
+}
+
+.sidebar.is-collapsed .sidebar-footer {
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar.is-collapsed .sidebar-link:hover {
+  background: #ebf4fb;
+  border-color: rgba(29, 92, 139, 0.25);
+}
+
+.sidebar.is-collapsed .sidebar-auth:hover {
+  background: #f1f5f9;
+}
+
+.sidebar.is-collapsed .sidebar-link.is-active {
+  box-shadow: 0 2px 8px rgba(29, 92, 139, 0.15);
+}
+
+.sidebar.is-collapsed .sidebar-nav,
+.sidebar.is-collapsed .sidebar-footer {
+  padding: 0.5rem;
+}
+
+.sidebar.is-collapsed .sidebar-link svg,
+.sidebar.is-collapsed .sidebar-auth svg {
+  transform: scale(1.1);
+}
+
 /* Nav */
 .sidebar-nav {
   display: grid;
@@ -149,7 +278,7 @@ body {
   border: 1px solid transparent;
   background: transparent;
   color: #64748b;
-  border-radius: 9px;
+  border-radius: 10px;
   padding: 0.68rem 0.85rem;
   display: inline-flex;
   align-items: center;
@@ -158,9 +287,22 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  position: relative;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    padding 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    gap 280ms cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
   width: 100%;
+}
+
+.sidebar-link svg,
+.sidebar-auth svg {
+  flex-shrink: 0;
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-link:hover {
@@ -168,11 +310,34 @@ body {
   color: #1e293b;
 }
 
+.sidebar-link:hover svg {
+  transform: scale(1.08);
+}
+
 .sidebar-link.is-active {
   background: #ebf4fb;
   color: #1d5c8b;
   border-color: rgba(29, 92, 139, 0.18);
   font-weight: 600;
+}
+
+.sidebar-link.is-active::before {
+  content: "";
+  position: absolute;
+  inset-inline-end: -0.55rem;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 999px;
+  background: #1d5c8b;
+  opacity: 0;
+  transition: opacity 220ms ease, transform 220ms ease;
+  transform: scaleY(0.6);
+}
+
+.sidebar.is-collapsed .sidebar-link.is-active::before {
+  opacity: 1;
+  transform: scaleY(1);
 }
 
 /* Footer */
@@ -211,6 +376,23 @@ body {
   cursor: pointer;
   z-index: 60;
   box-shadow: 0 4px 12px rgba(15, 42, 68, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-layout,
+  .sidebar,
+  .sidebar-brand-text,
+  .sidebar-link,
+  .sidebar-link span,
+  .sidebar-link svg,
+  .sidebar-auth,
+  .sidebar-auth span,
+  .sidebar-auth svg,
+  .sidebar-collapse,
+  .sidebar-collapse svg,
+  .sidebar-link.is-active::before {
+    transition: none !important;
+  }
 }
 
 .sidebar-overlay {
@@ -329,6 +511,14 @@ body {
 
   .sidebar-close {
     display: inline-flex;
+  }
+
+  .sidebar-collapse {
+    display: none;
+  }
+
+  .app-layout.is-collapsed {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-content {

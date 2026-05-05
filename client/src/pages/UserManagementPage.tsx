@@ -3,6 +3,7 @@ import axios from "axios";
 import { Navigate } from "react-router-dom";
 import {
   Check,
+  ChevronDown,
   Pencil,
   Plus,
   Trash2,
@@ -38,6 +39,19 @@ const formatRoleLabel = (role: string) => {
   return getRoleLabel(role);
 };
 
+const ROLE_COLORS: Record<string, string> = {
+  admin: "#1d5c8b",
+  doctor: "#0ea5e9",
+  nurse: "#06b6d4",
+  midwife: "#14b8a6",
+  obgyn: "#8b5cf6",
+  anesthesiologist: "#ec4899",
+  orderly: "#f59e0b",
+  pediatrician: "#10b981",
+  shabbat_scribe: "#64748b",
+  secretary: "#475569",
+};
+
 const defaultAddForm = {
   email: "",
   password: "",
@@ -54,6 +68,7 @@ export default function UserManagementPage() {
   const [editingUserSaving, setEditingUserSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
@@ -236,35 +251,109 @@ export default function UserManagementPage() {
           )}
         </div>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-          <article className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">סה״כ משתמשים</p>
-              <span className="w-10 h-10 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm mb-6 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setStatsExpanded((p) => !p)}
+            className="w-full px-5 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer text-right"
+            aria-expanded={statsExpanded}
+            aria-label="הצג פירוט משתמשים"
+          >
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="w-11 h-11 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
                 <Users className="w-5 h-5" />
               </span>
-            </div>
-            <p className="text-3xl font-semibold text-slate-900 mt-3">
-              {analytics.totalUsers}
-            </p>
-          </article>
-
-          {userRoleOptions.map((option) => {
-            const Icon = option.icon;
-            return (
-              <article key={option.value} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-500">{option.pluralLabel}</p>
-                  <span className="w-10 h-10 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
-                    <Icon className="w-5 h-5" />
-                  </span>
-                </div>
-                <p className="text-3xl font-semibold text-slate-900 mt-3">
-                  {analytics.roleCounts[option.value] ?? 0}
+              <div>
+                <p className="text-2xl font-bold text-slate-900 leading-none">
+                  {analytics.totalUsers}
                 </p>
-              </article>
-            );
-          })}
+                <p className="text-xs text-slate-500 mt-1">סה״כ משתמשים</p>
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 h-3 rounded-full overflow-hidden bg-slate-100 flex">
+              {analytics.totalUsers > 0 ? (
+                userRoleOptions.map((option) => {
+                  const count = analytics.roleCounts[option.value] ?? 0;
+                  if (count === 0) return null;
+                  const pct = (count / analytics.totalUsers) * 100;
+                  return (
+                    <div
+                      key={option.value}
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: ROLE_COLORS[option.value] ?? "#1d5c8b",
+                      }}
+                      title={`${option.pluralLabel}: ${count} (${Math.round(pct)}%)`}
+                      className="transition-[width] duration-300"
+                    />
+                  );
+                })
+              ) : null}
+            </div>
+
+            <ChevronDown
+              className={`w-5 h-5 text-slate-400 transition-transform duration-200 shrink-0 ${
+                statsExpanded ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          <div
+            className={`grid transition-all duration-300 ease-out ${
+              statsExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            }`}
+          >
+            <div className="overflow-hidden">
+              <div className="border-t border-slate-100 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {userRoleOptions.map((option) => {
+                  const Icon = option.icon;
+                  const count = analytics.roleCounts[option.value] ?? 0;
+                  const pct =
+                    analytics.totalUsers > 0
+                      ? Math.round((count / analytics.totalUsers) * 100)
+                      : 0;
+                  const color = ROLE_COLORS[option.value] ?? "#1d5c8b";
+                  const isEmpty = count === 0;
+                  return (
+                    <div
+                      key={option.value}
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-opacity ${
+                        isEmpty
+                          ? "border-slate-100 bg-slate-50/60 opacity-60"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <span
+                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: isEmpty ? "#f1f5f9" : `${color}1a`,
+                          color: isEmpty ? "#94a3b8" : color,
+                        }}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-slate-500 truncate leading-tight">
+                          {option.pluralLabel}
+                        </p>
+                        <div className="flex items-baseline gap-1.5 mt-0.5">
+                          <span className="text-lg font-bold text-slate-900 leading-none">
+                            {count}
+                          </span>
+                          {!isEmpty && (
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {pct}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </section>
 
         {showAddForm && (
@@ -414,7 +503,6 @@ export default function UserManagementPage() {
                   <th className="px-6 py-4 font-semibold">תפקיד</th>
                   <th className="px-6 py-4 font-semibold">טלפון</th>
                   <th className="px-6 py-4 font-semibold">אימייל</th>
-                  <th className="px-6 py-4 font-semibold">ID</th>
                   <th className="px-6 py-4 font-semibold">פעולות</th>
                 </tr>
               </thead>
@@ -423,7 +511,7 @@ export default function UserManagementPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-6 py-10 text-center text-slate-500"
                     >
                       <LoadingState label="טוען משתמשים..." className="p-0" />
@@ -432,7 +520,7 @@ export default function UserManagementPage() {
                 ) : filteredUsers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-6 py-10 text-center text-slate-500"
                     >
                       לא נמצאו משתמשים
@@ -455,9 +543,6 @@ export default function UserManagementPage() {
                         {u.phone ?? "—"}
                       </td>
                       <td className="px-6 py-4 text-slate-600">{u.email}</td>
-                      <td className="px-6 py-4 text-slate-400 font-mono text-xs">
-                        {u.id}
-                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
