@@ -2,6 +2,7 @@ import { CalendarDays, Clock, Moon, Stethoscope, UserRoundPlus, X } from "lucide
 import { useEffect, useMemo, useState } from "react";
 import { normalizeApiTimeToHourMinute } from "../../utils/date.utils";
 import type { Shift } from "../types";
+import { LoadingSpinner } from "../ui/LoadingIndicator";
 
 type ShiftFormValues = {
   shiftDate: string;
@@ -235,8 +236,9 @@ export default function ShiftFormModal({
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 h-11 rounded-xl bg-[#1d5c8b] text-white font-semibold text-sm hover:bg-[#164e78] disabled:opacity-60 transition-colors shadow-sm"
+              className="flex-1 h-11 rounded-xl bg-[#1d5c8b] text-white font-semibold text-sm hover:bg-[#164e78] disabled:opacity-60 transition-colors shadow-sm inline-flex items-center justify-center gap-2"
             >
+              {saving ? <LoadingSpinner className="w-4 h-4" /> : null}
               {submitLabel}
             </button>
             <button

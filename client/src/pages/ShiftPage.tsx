@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Link, Navigate } from "react-router-dom";
-import { BrainCircuit, CheckCircle2, Eye, Loader2, Lock, XCircle } from "lucide-react";
+import { BrainCircuit, CheckCircle2, Eye, Lock, XCircle } from "lucide-react";
 import { AuthService } from "../services/auth.service";
+import { LoadingSpinner } from "../components/ui/LoadingIndicator";
 
 import WeekBar from "../components/shifts/WeekBar";
 import WeekPickerModal from "../components/shifts/WeekPickerModal";
@@ -595,8 +596,9 @@ export default function ShiftPage() {
                 type="button"
                 onClick={() => setShowCollectionDeadlineModal(true)}
                 disabled={!canOpenCollection || openingCollection}
-                className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 transition-colors"
+                className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 transition-colors inline-flex items-center gap-1.5"
               >
+                {openingCollection ? <LoadingSpinner className="w-3 h-3" /> : null}
                 {openingCollection ? "פותח..." : "פתח איסוף"}
               </button>
               <button
@@ -615,7 +617,7 @@ export default function ShiftPage() {
                   disabled={forceLocking}
                   className="h-8 px-3 rounded-lg border border-amber-400 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
                 >
-                  <Lock className="w-3 h-3" />
+                  {forceLocking ? <LoadingSpinner className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                   {forceLocking ? "נועל..." : "נעל שבוע"}
                 </button>
               )}
@@ -630,7 +632,7 @@ export default function ShiftPage() {
                   className="h-8 px-3 rounded-lg bg-[#0f7a82] text-white text-xs font-medium hover:bg-[#0a6169] disabled:opacity-40 flex items-center gap-1.5 transition-colors"
                 >
                   {isSolverRunning ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <LoadingSpinner className="w-3 h-3" />
                   ) : (
                     <BrainCircuit className="w-3 h-3" />
                   )}
@@ -663,7 +665,7 @@ export default function ShiftPage() {
               }`}
             >
               {(activeSolveRun.status === "QUEUED" || activeSolveRun.status === "RUNNING") && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <LoadingSpinner className="w-3.5 h-3.5" />
               )}
               {activeSolveRun.status === "SUCCEEDED" && (
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />

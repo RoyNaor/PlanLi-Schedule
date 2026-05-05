@@ -5,6 +5,7 @@ import { Lock, Mail } from "lucide-react";
 import { auth } from "../firebase";
 import { AuthService } from "../services/auth.service";
 import logo from "../assets/Logo.png";
+import { LoadingSpinner } from "../components/ui/LoadingIndicator";
 
 // Handles sign-in with Firebase and then syncs the authenticated user with backend.
 export default function LoginPage() {
@@ -109,9 +110,16 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full bg-[#1d5c8b] text-white py-2 rounded-xl font-medium hover:bg-[#164e78] transition-colors disabled:opacity-60"
+          className="w-full bg-[#1d5c8b] text-white py-2 rounded-xl font-medium hover:bg-[#164e78] transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2"
         >
-          התחברות
+          {submitting ? (
+            <>
+              <LoadingSpinner className="w-4 h-4" />
+              מתחבר...
+            </>
+          ) : (
+            "התחברות"
+          )}
         </button>
       </form>
 

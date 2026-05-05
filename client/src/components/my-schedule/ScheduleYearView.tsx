@@ -4,6 +4,7 @@ import {
   getCalendarMonthMatrix,
   parseIsoDateToUtc,
 } from "../../utils/date.utils";
+import { LoadingState } from "../ui/LoadingIndicator";
 import { chunkArray, mergeAssignmentsByDate } from "./scheduleData";
 import { dayNumberFormatter, monthNameOnlyFormatter, WEEK_DAY_LABELS } from "./formatters";
 import { navFlashFocus, navFlashOn } from "./scheduleNavFlash";
@@ -36,8 +37,8 @@ export function ScheduleYearView({
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-400 text-sm">
-        טוען סידור...
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <LoadingState label="טוען סידור..." />
       </div>
     );
   }

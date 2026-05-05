@@ -14,6 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
+import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
 
 interface UserData {
   id: string;
@@ -56,6 +57,9 @@ export default function UserManagementPage() {
   const session = useMemo(() => AuthService.getSession(), []);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingUser, setAddingUser] = useState(false);
+  const [editingUserSaving, setEditingUserSaving] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
@@ -138,6 +142,7 @@ export default function UserManagementPage() {
     if (!session) return;
 
     try {
+      setAddingUser(true);
       const payload = {
         ...formData,
         phone: formData.phone.trim() === "" ? null : formData.phone.trim(),
@@ -155,6 +160,8 @@ export default function UserManagementPage() {
       console.error("Error adding user:", error);
       const msg = error.response?.data?.error || "Failed to add user";
       alert(`Error: ${msg}`);
+    } finally {
+      setAddingUser(false);
     }
   };
 
@@ -173,6 +180,7 @@ export default function UserManagementPage() {
     if (!session || !editingUser) return;
 
     try {
+      setEditingUserSaving(true);
       await axios.put(
         `${API_BASE}/users/${editingUser.id}`,
         {
@@ -190,6 +198,8 @@ export default function UserManagementPage() {
       console.error("Error updating user:", error);
       const msg = error.response?.data?.error || "Failed to update user";
       alert(`Error: ${msg}`);
+    } finally {
+      setEditingUserSaving(false);
     }
   };
 
@@ -197,6 +207,7 @@ export default function UserManagementPage() {
     if (!session || !userToDelete) return;
 
     try {
+      setDeletingUser(true);
       await axios.delete(`${API_BASE}/users/${userToDelete.id}`, {
         headers: { Authorization: `Bearer ${session.jwtToken}` },
       });
@@ -207,6 +218,8 @@ export default function UserManagementPage() {
       console.error("Error deleting user:", error);
       const msg = error.response?.data?.error || "Failed to delete user";
       alert(`Error: ${msg}`);
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -367,9 +380,11 @@ export default function UserManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1d5c8b] text-white rounded-xl hover:bg-[#164e78]"
+                  disabled={addingUser}
+                  className="px-5 py-2 bg-[#1d5c8b] text-white rounded-xl hover:bg-[#164e78] disabled:opacity-60 inline-flex items-center gap-2"
                 >
-                  שמור משתמש
+                  {addingUser ? <LoadingSpinner className="w-4 h-4" /> : null}
+                  {addingUser ? "שומר משתמש..." : "שמור משתמש"}
                 </button>
               </div>
             </form>
@@ -436,7 +451,7 @@ export default function UserManagementPage() {
                       colSpan={6}
                       className="px-6 py-10 text-center text-slate-500"
                     >
-                      טוען משתמשים...
+                      <LoadingState label="טוען משתמשים..." className="p-0" />
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
@@ -497,7 +512,7 @@ export default function UserManagementPage() {
 
           <div className="md:hidden divide-y divide-slate-100">
             {loading ? (
-              <p className="px-4 py-8 text-center text-slate-500">טוען משתמשים...</p>
+              <LoadingState label="טוען משתמשים..." className="px-4 py-8" />
             ) : filteredUsers.length === 0 ? (
               <p className="px-4 py-8 text-center text-slate-500">לא נמצאו משתמשים</p>
             ) : (
@@ -638,9 +653,11 @@ export default function UserManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#1d5c8b] text-white"
+                  disabled={editingUserSaving}
+                  className="px-4 py-2 rounded-xl bg-[#1d5c8b] text-white disabled:opacity-60 inline-flex items-center gap-2"
                 >
-                  שמור שינויים
+                  {editingUserSaving ? <LoadingSpinner className="w-4 h-4" /> : null}
+                  {editingUserSaving ? "שומר..." : "שמור שינויים"}
                 </button>
               </div>
             </form>
@@ -667,10 +684,12 @@ export default function UserManagementPage() {
                 ביטול
               </button>
               <button
-                className="px-4 py-2 rounded-xl bg-rose-600 text-white"
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white disabled:opacity-60 inline-flex items-center gap-2"
+                disabled={deletingUser}
                 onClick={() => void confirmDeleteUser()}
               >
-                מחק משתמש
+                {deletingUser ? <LoadingSpinner className="w-4 h-4" /> : null}
+                {deletingUser ? "מוחק..." : "מחק משתמש"}
               </button>
             </div>
           </div>

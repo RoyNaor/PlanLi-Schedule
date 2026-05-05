@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { KeyboardEvent } from "react";
 import { parseIsoDateToUtc } from "../../utils/date.utils";
+import { LoadingState } from "../ui/LoadingIndicator";
 import { dayNumberFormatter, WEEK_DAY_LABELS } from "./formatters";
 import {
   navFlashColumnHoverTransition,
@@ -75,7 +76,7 @@ export function ScheduleWeekView({
                 );
               })}
             </div>
-            <div className="p-8 text-center text-slate-400 text-sm">טוען סידור...</div>
+            <LoadingState label="טוען סידור..." />
           </>
         ) : (
           <div

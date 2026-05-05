@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { MonthMatrixCell } from "../../utils/date.utils";
 import { parseIsoDateToUtc } from "../../utils/date.utils";
+import { LoadingState } from "../ui/LoadingIndicator";
 import { dayNumberFormatter, WEEK_DAY_LABELS } from "./formatters";
 import {
   navFlashFocus,
@@ -43,7 +44,7 @@ export function ScheduleMonthView({
         ))}
       </div>
       {loading ? (
-        <div className="p-8 text-center text-slate-400 text-sm">טוען סידור...</div>
+        <LoadingState label="טוען סידור..." />
       ) : (
         <div className="overflow-x-auto overflow-y-visible p-0.5">
           {monthRows.map((row, ri) => {
