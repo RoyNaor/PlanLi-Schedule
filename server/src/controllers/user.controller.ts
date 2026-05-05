@@ -2,19 +2,20 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { UserService } from "../services/user.service.js";
 import { FirebaseAdminService } from "../services/firebase-admin.service.js";
+import { userRoleValues } from "../utils/staffing.utils.js";
 
 const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   full_name: z.string().min(1),
-  role: z.enum(["admin", "doctor", "nurse"]),
+  role: z.enum(userRoleValues),
   phone: z.string().trim().min(1).nullable().optional(),
 });
 
 const updateUserSchema = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
-  role: z.enum(["admin", "doctor", "nurse"]),
+  role: z.enum(userRoleValues),
   phone: z.string().trim().min(1).nullable().optional(),
 });
 

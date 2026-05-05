@@ -10,6 +10,20 @@ from ortools.sat.python import cp_model
 app = Flask(__name__)
 JERUSALEM_TZ = ZoneInfo("Asia/Jerusalem")
 
+STAFFING_FIELDS: dict[str, str] = {
+    "doctor": "min_doctors",
+    "nurse": "min_nurses",
+    "midwife": "min_midwives",
+    "obgyn": "min_obgyns",
+    "anesthesiologist": "min_anesthesiologists",
+    "orderly": "min_orderlies",
+    "pediatrician": "min_pediatricians",
+    "shabbat_scribe": "min_shabbat_scribes",
+    "secretary": "min_secretaries",
+}
+
+STAFF_ROLES = set(STAFFING_FIELDS.keys())
+
 
 def parse_iso_datetime(value: str) -> datetime:
     # Accept "Z" suffix and timezone offsets.
@@ -54,17 +68,18 @@ def validate_payload(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
     for user in users:
         if not isinstance(user, dict):
             raise ValueError("each user must be an object")
-        if not user.get("id") or user.get("role") not in {"doctor", "nurse"}:
-            raise ValueError("user must include id and role (doctor|nurse)")
+        if not user.get("id") or user.get("role") not in STAFF_ROLES:
+            raise ValueError("user must include id and a supported staff role")
 
     for shift in shifts:
         if not isinstance(shift, dict):
             raise ValueError("each shift must be an object")
-        required = ["id", "shift_date", "start_time", "end_time", "min_doctors", "min_nurses"]
+        required = ["id", "shift_date", "start_time", "end_time"]
         if any(key not in shift for key in required):
             raise ValueError("shift is missing required fields")
-        if int(shift["min_doctors"]) < 0 or int(shift["min_nurses"]) < 0:
-            raise ValueError("min_doctors and min_nurses must be non-negative")
+        for field in STAFFING_FIELDS.values():
+            if int(shift.get(field, 0)) < 0:
+                raise ValueError("shift staffing counts must be non-negative")
 
     for c in constraints:
         if not isinstance(c, dict):
@@ -116,41 +131,25 @@ def solve() -> Any:
         # Coverage constraints per shift/role.
         for shift in shifts:
             shift_id = int(shift["id"])
-            doctor_vars = [
-                assignment_vars[(user_id, shift_id)]
-                for user_id, role in user_role.items()
-                if role == "doctor"
-            ]
-            nurse_vars = [
-                assignment_vars[(user_id, shift_id)]
-                for user_id, role in user_role.items()
-                if role == "nurse"
-            ]
+            for role, field in STAFFING_FIELDS.items():
+                role_vars = [
+                    assignment_vars[(user_id, shift_id)]
+                    for user_id, user_role_value in user_role.items()
+                    if user_role_value == role
+                ]
+                minimum_required = int(shift.get(field, 0))
 
-            min_doctors = int(shift["min_doctors"])
-            min_nurses = int(shift["min_nurses"])
+                if minimum_required > len(role_vars):
+                    return jsonify(
+                        {
+                            "status": "infeasible",
+                            "assignments": [],
+                            "message": f"not enough {role} staff to satisfy coverage",
+                            "solver_meta": {},
+                        }
+                    )
 
-            if min_doctors > len(doctor_vars):
-                return jsonify(
-                    {
-                        "status": "infeasible",
-                        "assignments": [],
-                        "message": "not enough doctors to satisfy coverage",
-                        "solver_meta": {},
-                    }
-                )
-            if min_nurses > len(nurse_vars):
-                return jsonify(
-                    {
-                        "status": "infeasible",
-                        "assignments": [],
-                        "message": "not enough nurses to satisfy coverage",
-                        "solver_meta": {},
-                    }
-                )
-
-            model.Add(sum(doctor_vars) == min_doctors)
-            model.Add(sum(nurse_vars) == min_nurses)
+                model.Add(sum(role_vars) == minimum_required)
 
         # One staff member cannot be assigned to overlapping shifts.
         ordered_shift_ids = sorted(shift_by_id.keys())
@@ -194,7 +193,7 @@ def solve() -> Any:
         # Light fairness by minimizing range of assignments in each role.
         fairness_terms: list[cp_model.IntVar] = []
         max_possible = len(shifts)
-        for role in ("doctor", "nurse"):
+        for role in STAFFING_FIELDS.keys():
             role_users = [uid for uid, r in user_role.items() if r == role]
             if len(role_users) <= 1:
                 continue

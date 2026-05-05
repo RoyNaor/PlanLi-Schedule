@@ -4,6 +4,7 @@ import { Link, Navigate } from "react-router-dom";
 import { BrainCircuit, CheckCircle2, Eye, Lock, XCircle } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner } from "../components/ui/LoadingIndicator";
+import { staffingFields, type StaffingField } from "../utils/staffing";
 
 import WeekBar from "../components/shifts/WeekBar";
 import WeekPickerModal from "../components/shifts/WeekPickerModal";
@@ -317,9 +318,7 @@ export default function ShiftPage() {
       shiftDate: string;
       startTime: string;
       endTime: string;
-      minDoctors: number;
-      minNurses: number;
-    }) => {
+    } & Record<StaffingField, number>) => {
       if (!selectedWeek) return;
       const normalizedStartTime = normalizeApiTimeToHourMinute(values.startTime);
       const normalizedEndTime = normalizeApiTimeToHourMinute(values.endTime);
@@ -334,8 +333,9 @@ export default function ShiftPage() {
         shift_date: values.shiftDate,
         start_time: normalizedStartTime,
         end_time: normalizedEndTime,
-        min_doctors: values.minDoctors,
-        min_nurses: values.minNurses,
+        ...Object.fromEntries(
+          staffingFields.map((field) => [field.apiField, values[field.field]]),
+        ),
       };
 
       try {
@@ -348,8 +348,9 @@ export default function ShiftPage() {
               shift_date: payload.shift_date,
               start_time: payload.start_time,
               end_time: payload.end_time,
-              min_doctors: payload.min_doctors,
-              min_nurses: payload.min_nurses,
+              ...Object.fromEntries(
+                staffingFields.map((field) => [field.apiField, values[field.field]]),
+              ),
             },
             { headers: authHeaders },
           );
