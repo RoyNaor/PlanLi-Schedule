@@ -22,7 +22,14 @@ function App() {
   const location = useLocation();
   const [session, setSession] = useState(() => AuthService.getSession());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("planli:sidebarCollapsed") === "1",
+  );
   const isLoginRoute = location.pathname === "/login";
+
+  useEffect(() => {
+    localStorage.setItem("planli:sidebarCollapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     const syncSession = () => setSession(AuthService.getSession());
@@ -66,7 +73,11 @@ function App() {
   const handleNavigate = (path: string) => navigate(path);
 
   return (
-    <div className={`app-layout${isLoginRoute ? " is-login" : ""}`}>
+    <div
+      className={`app-layout${isLoginRoute ? " is-login" : ""}${
+        !isLoginRoute && sidebarCollapsed ? " is-collapsed" : ""
+      }`}
+    >
       {!isLoginRoute && !sidebarOpen && (
         <button
           type="button"
@@ -81,10 +92,12 @@ function App() {
       {!isLoginRoute ? (
         <Sidebar
           open={sidebarOpen}
+          collapsed={sidebarCollapsed}
           currentPath={location.pathname}
           hasSession={Boolean(session)}
           isAdmin={session?.user.role === "admin"}
           onClose={() => setSidebarOpen(false)}
+          onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
           onNavigate={handleNavigate}
           onAuthAction={handleAuthAction}
         />
