@@ -32,5 +32,7 @@ test("resolveScheduleQueryWeekStart resolves current and next week schedule comm
 
   assert.equal(resolveScheduleQueryWeekStart("מה השיבוצים שלי לשבוע הקרוב?", now), "2026-04-26");
   assert.equal(resolveScheduleQueryWeekStart("מה השיבוצים שלי לשבוע הבא?", now), "2026-05-03");
+  assert.equal(resolveScheduleQueryWeekStart("אילו שיבוצים קיימים לי השבוע?", now), "2026-04-26");
+  assert.equal(resolveScheduleQueryWeekStart("איזה משמרות יש לי שבוע הבא?", now), "2026-05-03");
   assert.equal(resolveScheduleQueryWeekStart("אל תשבץ אותי ביום ראשון", now), null);
 });
