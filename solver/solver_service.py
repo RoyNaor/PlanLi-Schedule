@@ -24,6 +24,139 @@ STAFFING_FIELDS: dict[str, str] = {
 
 STAFF_ROLES = set(STAFFING_FIELDS.keys())
 
+BLOCKING_WORKER_STATES = {
+    "course",
+    "training",
+    "vacation",
+    "holiday",
+    "leave",
+    "sick",
+    "sick_leave",
+    "בקורס",
+    "בחופש",
+    "מחלה",
+}
+
+NON_BLOCKING_WORKER_STATES = {
+    "working",
+    "active",
+    "available",
+    "עובד",
+    "עובדת",
+}
+
+
+def as_int(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    return int(value)
+
+
+def is_monthly_payload(payload: dict[str, Any]) -> bool:
+    shifts = payload.get("shifts", [])
+    return (
+        "month" in payload
+        or "workers" in payload
+        or "departments" in payload
+        or "arrangements" in payload
+        or any(isinstance(shift, dict) and ("department_id" in shift or "requirements" in shift) for shift in shifts)
+    )
+
+
+def normalize_worker_id(worker: dict[str, Any]) -> str:
+    return str(worker.get("id") or worker.get("worker_id") or worker.get("user_id") or "")
+
+
+def normalize_worker_type(worker: dict[str, Any]) -> str:
+    return str(worker.get("worker_type") or worker.get("type") or worker.get("role") or "")
+
+
+def normalize_worker_departments(worker: dict[str, Any]) -> set[str] | None:
+    raw_departments = (
+        worker.get("department_ids")
+        or worker.get("eligible_department_ids")
+        or worker.get("departments")
+    )
+    if raw_departments is None:
+        return None
+    if not isinstance(raw_departments, list):
+        raise ValueError("worker department eligibility must be an array")
+    return {str(department_id) for department_id in raw_departments}
+
+
+def normalize_shift_requirements(shift: dict[str, Any]) -> dict[str, int]:
+    requirements: dict[str, int] = {}
+
+    raw_requirements = shift.get("requirements", shift.get("required_staff", []))
+    if isinstance(raw_requirements, dict):
+        for worker_type, count in raw_requirements.items():
+            normalized_type = str(worker_type)
+            requirements[normalized_type] = requirements.get(normalized_type, 0) + as_int(count)
+    elif isinstance(raw_requirements, list):
+        for requirement in raw_requirements:
+            if not isinstance(requirement, dict):
+                raise ValueError("each shift requirement must be an object")
+            worker_type = str(
+                requirement.get("worker_type")
+                or requirement.get("type")
+                or requirement.get("role")
+                or ""
+            )
+            if not worker_type:
+                raise ValueError("shift requirement is missing worker_type")
+            requirements[worker_type] = requirements.get(worker_type, 0) + as_int(requirement.get("count", 0))
+    else:
+        raise ValueError("shift requirements must be an array or object")
+
+    for worker_type, field in STAFFING_FIELDS.items():
+        count = as_int(shift.get(field, 0))
+        if count > 0:
+            requirements[worker_type] = requirements.get(worker_type, 0) + count
+
+    for worker_type, count in requirements.items():
+        if count < 0:
+            raise ValueError(f"requirement for {worker_type} must be non-negative")
+
+    return {worker_type: count for worker_type, count in requirements.items() if count > 0}
+
+
+def state_blocks_assignment(state: dict[str, Any]) -> bool:
+    if "blocks_assignment" in state:
+        return bool(state["blocks_assignment"])
+
+    state_name = str(state.get("state") or state.get("status") or "").strip().lower()
+    if state_name in NON_BLOCKING_WORKER_STATES:
+        return False
+    return state_name in BLOCKING_WORKER_STATES
+
+
+def collect_worker_states(payload: dict[str, Any], workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    states: list[dict[str, Any]] = []
+    raw_states = payload.get("worker_states", payload.get("states", []))
+    if raw_states is None:
+        raw_states = []
+    if not isinstance(raw_states, list):
+        raise ValueError("worker_states must be an array")
+
+    for state in raw_states:
+        if not isinstance(state, dict):
+            raise ValueError("each worker state must be an object")
+        states.append(state)
+
+    for worker in workers:
+        worker_id = normalize_worker_id(worker)
+        raw_worker_states = worker.get("states", [])
+        if raw_worker_states is None:
+            continue
+        if not isinstance(raw_worker_states, list):
+            raise ValueError("worker states must be an array")
+        for state in raw_worker_states:
+            if not isinstance(state, dict):
+                raise ValueError("each worker state must be an object")
+            states.append({**state, "worker_id": worker_id})
+
+    return states
+
 
 def parse_iso_datetime(value: str) -> datetime:
     # Accept "Z" suffix and timezone offsets.
@@ -93,6 +226,309 @@ def validate_payload(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
     return users, shifts, constraints
 
 
+def validate_monthly_payload(
+    payload: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    workers = payload.get("workers", payload.get("users"))
+    shifts = payload.get("shifts")
+    constraints = payload.get("constraints", [])
+
+    if not isinstance(workers, list) or not isinstance(shifts, list) or not isinstance(constraints, list):
+        raise ValueError("workers/users, shifts, and constraints must be arrays")
+
+    worker_ids: set[str] = set()
+    for worker in workers:
+        if not isinstance(worker, dict):
+            raise ValueError("each worker must be an object")
+        worker_id = normalize_worker_id(worker)
+        worker_type = normalize_worker_type(worker)
+        if not worker_id or not worker_type:
+            raise ValueError("worker must include id and worker_type/type/role")
+        if worker_id in worker_ids:
+            raise ValueError(f"duplicate worker id {worker_id}")
+        worker_ids.add(worker_id)
+        if as_int(worker.get("seniority", 0)) < 0:
+            raise ValueError("worker seniority must be non-negative")
+        normalize_worker_departments(worker)
+
+    for shift in shifts:
+        if not isinstance(shift, dict):
+            raise ValueError("each shift must be an object")
+        required = ["id", "department_id", "shift_date", "start_time", "end_time"]
+        if any(key not in shift for key in required):
+            raise ValueError("monthly shift is missing id, department_id, shift_date, start_time, or end_time")
+        normalize_shift_requirements(shift)
+
+    for c in constraints:
+        if not isinstance(c, dict):
+            raise ValueError("each constraint must be an object")
+        worker_id = str(c.get("worker_id") or c.get("user_id") or "")
+        if not worker_id or "start_time" not in c or "end_time" not in c:
+            raise ValueError("constraint is missing worker_id/user_id, start_time, or end_time")
+        if c.get("priority", "SOFT") not in {"HARD", "SOFT"}:
+            raise ValueError("constraint priority must be HARD or SOFT")
+
+    worker_states = collect_worker_states(payload, workers)
+    for state in worker_states:
+        worker_id = str(state.get("worker_id") or state.get("user_id") or "")
+        if not worker_id or "start_time" not in state or "end_time" not in state:
+            raise ValueError("worker state is missing worker_id/user_id, start_time, or end_time")
+
+    return workers, shifts, constraints, worker_states
+
+
+def solve_monthly_payload(payload: dict[str, Any]) -> Any:
+    workers, shifts, constraints, worker_states = validate_monthly_payload(payload)
+
+    shift_windows: dict[Any, tuple[datetime, datetime]] = {}
+    shift_by_id: dict[Any, dict[str, Any]] = {}
+    shift_requirements: dict[Any, dict[str, int]] = {}
+    ordered_shift_ids: list[Any] = []
+
+    for shift in shifts:
+        shift_id = shift["id"]
+        if shift_id in shift_by_id:
+            return jsonify(
+                {
+                    "status": "infeasible",
+                    "assignments": [],
+                    "message": f"duplicate shift id {shift_id}",
+                    "solver_meta": {},
+                }
+            )
+        start_dt, end_dt = parse_shift_window(
+            str(shift["shift_date"]), str(shift["start_time"]), str(shift["end_time"])
+        )
+        shift_windows[shift_id] = (start_dt, end_dt)
+        shift_by_id[shift_id] = shift
+        shift_requirements[shift_id] = normalize_shift_requirements(shift)
+        ordered_shift_ids.append(shift_id)
+
+    worker_by_id: dict[str, dict[str, Any]] = {}
+    worker_type: dict[str, str] = {}
+    worker_seniority: dict[str, int] = {}
+    worker_departments: dict[str, set[str] | None] = {}
+
+    for worker in workers:
+        worker_id = normalize_worker_id(worker)
+        worker_by_id[worker_id] = worker
+        worker_type[worker_id] = normalize_worker_type(worker)
+        worker_seniority[worker_id] = as_int(worker.get("seniority", 0))
+        worker_departments[worker_id] = normalize_worker_departments(worker)
+
+    def worker_can_cover_shift(worker_id: str, shift: dict[str, Any]) -> bool:
+        allowed_departments = worker_departments[worker_id]
+        return allowed_departments is None or str(shift["department_id"]) in allowed_departments
+
+    model = cp_model.CpModel()
+    assignment_vars: dict[tuple[str, Any], cp_model.IntVar] = {}
+
+    for shift_id in ordered_shift_ids:
+        shift = shift_by_id[shift_id]
+        required_types = set(shift_requirements[shift_id].keys())
+        for worker_id, current_worker_type in worker_type.items():
+            if current_worker_type not in required_types:
+                continue
+            if not worker_can_cover_shift(worker_id, shift):
+                continue
+            assignment_vars[(worker_id, shift_id)] = model.NewBoolVar(
+                f"x_{len(assignment_vars)}"
+            )
+
+    # Coverage: each department/arrangement shift has its own required count per worker type.
+    for shift_id in ordered_shift_ids:
+        shift = shift_by_id[shift_id]
+        for required_worker_type, required_count in shift_requirements[shift_id].items():
+            role_vars = [
+                assignment_vars[(worker_id, shift_id)]
+                for worker_id, current_worker_type in worker_type.items()
+                if current_worker_type == required_worker_type
+                and (worker_id, shift_id) in assignment_vars
+            ]
+
+            if required_count > len(role_vars):
+                return jsonify(
+                    {
+                        "status": "infeasible",
+                        "assignments": [],
+                        "message": (
+                            f"not enough {required_worker_type} staff for shift {shift_id} "
+                            f"in department {shift.get('department_id')}"
+                        ),
+                        "solver_meta": {
+                            "monthly_solver_version": 2,
+                            "department_id": shift.get("department_id"),
+                            "arrangement_id": shift.get("arrangement_id"),
+                        },
+                    }
+                )
+
+            model.Add(sum(role_vars) == required_count)
+
+    # One worker cannot be in two departments/arrangements at overlapping times.
+    for worker_id in worker_by_id.keys():
+        worker_shift_ids = [shift_id for shift_id in ordered_shift_ids if (worker_id, shift_id) in assignment_vars]
+        for i in range(len(worker_shift_ids)):
+            s1 = worker_shift_ids[i]
+            s1_start, s1_end = shift_windows[s1]
+            for j in range(i + 1, len(worker_shift_ids)):
+                s2 = worker_shift_ids[j]
+                s2_start, s2_end = shift_windows[s2]
+                if intervals_overlap(s1_start, s1_end, s2_start, s2_end):
+                    model.Add(assignment_vars[(worker_id, s1)] + assignment_vars[(worker_id, s2)] <= 1)
+
+    soft_penalty_terms: list[Any] = []
+    soft_penalties: list[tuple[cp_model.IntVar, int, int]] = []
+
+    # User constraints: HARD blocks, SOFT uses seniority-weighted penalty.
+    for c in constraints:
+        worker_id = str(c.get("worker_id") or c.get("user_id"))
+        if worker_id not in worker_by_id:
+            continue
+
+        c_start = parse_iso_datetime(str(c["start_time"]))
+        c_end = parse_iso_datetime(str(c["end_time"]))
+        if c_end <= c_start:
+            continue
+
+        priority = str(c.get("priority", "SOFT"))
+        for shift_id, (s_start, s_end) in shift_windows.items():
+            var = assignment_vars.get((worker_id, shift_id))
+            if var is None or not intervals_overlap(c_start, c_end, s_start, s_end):
+                continue
+
+            if priority == "HARD":
+                model.Add(var == 0)
+            else:
+                seniority = worker_seniority[worker_id]
+                weight = 1000 + seniority * 100
+                soft_penalty_terms.append(var * weight)
+                soft_penalties.append((var, weight, seniority))
+
+    # Worker states: course/vacation/sick can block assignment across date ranges.
+    for state in worker_states:
+        if not state_blocks_assignment(state):
+            continue
+
+        worker_id = str(state.get("worker_id") or state.get("user_id"))
+        if worker_id not in worker_by_id:
+            continue
+
+        state_start = parse_iso_datetime(str(state["start_time"]))
+        state_end = parse_iso_datetime(str(state["end_time"]))
+        if state_end <= state_start:
+            continue
+
+        for shift_id, (s_start, s_end) in shift_windows.items():
+            var = assignment_vars.get((worker_id, shift_id))
+            if var is not None and intervals_overlap(state_start, state_end, s_start, s_end):
+                model.Add(var == 0)
+
+    # Monthly fairness: equalize total shift count between workers of the same worker_type.
+    fairness_terms: list[cp_model.IntVar] = []
+    max_possible = len(shifts)
+    required_worker_types = {
+        worker_type_name
+        for requirements in shift_requirements.values()
+        for worker_type_name in requirements.keys()
+    }
+
+    for current_worker_type in required_worker_types:
+        type_worker_ids = [
+            worker_id
+            for worker_id, worker_type_name in worker_type.items()
+            if worker_type_name == current_worker_type
+            and any((worker_id, shift_id) in assignment_vars for shift_id in ordered_shift_ids)
+        ]
+        if len(type_worker_ids) <= 1:
+            continue
+
+        loads = []
+        for worker_id in type_worker_ids:
+            load = model.NewIntVar(0, max_possible, f"load_{len(loads)}_{current_worker_type}")
+            model.Add(
+                load == sum(
+                    assignment_vars[(worker_id, shift_id)]
+                    for shift_id in ordered_shift_ids
+                    if (worker_id, shift_id) in assignment_vars
+                )
+            )
+            loads.append(load)
+
+        max_load = model.NewIntVar(0, max_possible, f"max_load_{current_worker_type}")
+        min_load = model.NewIntVar(0, max_possible, f"min_load_{current_worker_type}")
+        model.AddMaxEquality(max_load, loads)
+        model.AddMinEquality(min_load, loads)
+
+        imbalance = model.NewIntVar(0, max_possible, f"imbalance_{current_worker_type}")
+        model.Add(imbalance == max_load - min_load)
+        fairness_terms.append(imbalance)
+
+    objective_terms: list[Any] = []
+    objective_terms.extend(soft_penalty_terms)
+    objective_terms.extend(term * 50 for term in fairness_terms)
+    model.Minimize(sum(objective_terms) if objective_terms else 0)
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = float(payload.get("max_time_seconds", 20.0))
+    solver.parameters.num_search_workers = 8
+
+    status = solver.Solve(model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return jsonify(
+            {
+                "status": "infeasible",
+                "assignments": [],
+                "message": "no feasible monthly assignment found",
+                "solver_meta": {"monthly_solver_version": 2},
+            }
+        )
+
+    assignments = []
+    for (worker_id, shift_id), var in assignment_vars.items():
+        if solver.Value(var) != 1:
+            continue
+        shift = shift_by_id[shift_id]
+        assignments.append(
+            {
+                "shift_id": shift_id,
+                "user_id": worker_id,
+                "worker_id": worker_id,
+                "worker_type": worker_type[worker_id],
+                "department_id": shift.get("department_id"),
+                "arrangement_id": shift.get("arrangement_id"),
+            }
+        )
+
+    soft_violations = sum(int(solver.Value(var)) for var, _weight, _seniority in soft_penalties)
+    weighted_soft_penalty = sum(
+        int(solver.Value(var)) * weight for var, weight, _seniority in soft_penalties
+    )
+    seniority_penalty = sum(
+        int(solver.Value(var)) * seniority for var, _weight, seniority in soft_penalties
+    )
+    fairness_imbalance = sum(int(solver.Value(term)) for term in fairness_terms)
+    solver_status = "optimal" if status == cp_model.OPTIMAL else "feasible"
+
+    return jsonify(
+        {
+            "status": "feasible",
+            "assignments": assignments,
+            "solver_meta": {
+                "monthly_solver_version": 2,
+                "month": payload.get("month"),
+                "solver_status": solver_status,
+                "objective_value": solver.ObjectiveValue(),
+                "soft_violations": soft_violations,
+                "weighted_soft_penalty": weighted_soft_penalty,
+                "seniority_penalty": seniority_penalty,
+                "fairness_imbalance": fairness_imbalance,
+                "wall_time_seconds": solver.WallTime(),
+            },
+        }
+    )
+
+
 @app.get("/health")
 def health() -> Any:
     return jsonify({"ok": True, "service": "cp-sat-solver"})
@@ -104,6 +540,9 @@ def solve() -> Any:
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "request body must be a JSON object"}), 400
+
+        if is_monthly_payload(payload):
+            return solve_monthly_payload(payload)
 
         users, shifts, constraints = validate_payload(payload)
 
@@ -263,6 +702,19 @@ def solve() -> Any:
             }
         )
 
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"solver service failed: {exc}"}), 500
+
+
+@app.post("/solve-month")
+def solve_month() -> Any:
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
+        return solve_monthly_payload(payload)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # noqa: BLE001
