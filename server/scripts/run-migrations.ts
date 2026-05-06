@@ -1,15 +1,27 @@
 import "dotenv/config";
 import fs from "fs";
 import path from "path";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "@neondatabase/serverless";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const databaseUrl = process.env.DATABASE_URL;
+
+function createPoolConfig(urlString: string): PoolConfig {
+  const url = new URL(urlString);
+
+  return {
+    host: url.hostname,
+    port: url.port ? Number(url.port) : undefined,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ""),
+  };
+}
+
+const pool = new Pool(databaseUrl ? createPoolConfig(databaseUrl) : undefined);
 
 // Creates the migrations bookkeeping table when it does not exist yet.
 async function ensureMigrationsTable() {

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { DepartmentService } from "../services/department.service.js";
+import { MonthlyScheduleService } from "../services/monthly-schedule.service.js";
 import { UserService } from "../services/user.service.js";
 
 const departmentCodeSchema = z
@@ -131,6 +132,48 @@ export const departmentController = {
 
       const message = error instanceof Error ? error.message : "Failed to update department";
       console.error("Error updating department:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async listDepartmentStatuses(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) return adminCheck.error;
+
+      const month = typeof req.query.month === "string"
+        ? req.query.month
+        : new Date().toISOString().slice(0, 7);
+      const departments = await MonthlyScheduleService.listDepartmentStatuses(month);
+      return res.status(200).json({ departments });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch department statuses";
+      console.error("Error listing department statuses:", error);
+      return res.status(400).json({ error: message });
+    }
+  },
+
+  async getDepartmentMonthPlan(req: Request, res: Response) {
+    try {
+      const adminCheck = await requireAdmin(req, res);
+      if ("error" in adminCheck) return adminCheck.error;
+
+      const departmentId = typeof req.params.departmentId === "string" ? req.params.departmentId : "";
+      if (!departmentId.trim()) {
+        return res.status(400).json({ error: "departmentId URL parameter is required" });
+      }
+
+      const month = typeof req.query.month === "string"
+        ? req.query.month
+        : new Date().toISOString().slice(0, 7);
+      const plan = await MonthlyScheduleService.listDepartmentMonthPlan({
+        departmentId,
+        monthStart: month,
+      });
+      return res.status(200).json(plan);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch department month plan";
+      console.error("Error getting department month plan:", error);
       return res.status(400).json({ error: message });
     }
   },

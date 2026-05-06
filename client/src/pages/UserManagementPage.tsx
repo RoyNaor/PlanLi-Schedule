@@ -25,6 +25,7 @@ interface UserData {
   phone: string | null;
   departments: DepartmentData[];
   seniority: SeniorityData | null;
+  workerType: WorkerTypeData | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -44,6 +45,14 @@ interface SeniorityData {
   isActive: boolean;
 }
 
+interface WorkerTypeData {
+  id: string;
+  name: string;
+  code: string;
+  source: string;
+  isActive: boolean;
+}
+
 interface EditFormData {
   email: string;
   full_name: string;
@@ -51,6 +60,7 @@ interface EditFormData {
   phone: string;
   department_ids: string[];
   seniority_id: string;
+  worker_type_id: string;
 }
 
 interface AddFormData extends EditFormData {
@@ -84,6 +94,7 @@ const defaultAddForm: AddFormData = {
   phone: "",
   department_ids: [],
   seniority_id: "",
+  worker_type_id: "",
 };
 
 function isStaffRole(role: string) {
@@ -125,6 +136,7 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [departments, setDepartments] = useState<DepartmentData[]>([]);
   const [seniorities, setSeniorities] = useState<SeniorityData[]>([]);
+  const [workerTypes, setWorkerTypes] = useState<WorkerTypeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
   const [editingUserSaving, setEditingUserSaving] = useState(false);
@@ -145,6 +157,7 @@ export default function UserManagementPage() {
     phone: "",
     department_ids: [],
     seniority_id: "",
+    worker_type_id: "",
   });
 
   const defaultDepartmentIds = useMemo(() => {
@@ -156,6 +169,10 @@ export default function UserManagementPage() {
     const regular = seniorities.find((seniority) => seniority.code === "regular");
     return regular?.id ?? seniorities[0]?.id ?? "";
   }, [seniorities]);
+
+  const defaultWorkerTypeId = useMemo(() => {
+    return workerTypes.find((workerType) => workerType.isActive)?.id ?? workerTypes[0]?.id ?? "";
+  }, [workerTypes]);
 
   const fetchUsers = useCallback(async () => {
     if (!session) return;
@@ -171,6 +188,7 @@ export default function UserManagementPage() {
           ...user,
           departments: user.departments ?? [],
           seniority: user.seniority ?? null,
+          workerType: user.workerType ?? null,
         })),
       );
     } catch (error) {
@@ -216,12 +234,31 @@ export default function UserManagementPage() {
     }
   }, [session]);
 
+  const fetchWorkerTypes = useCallback(async () => {
+    if (!session) return;
+
+    try {
+      const res = await axios.get<{ worker_types: WorkerTypeData[] }>(
+        `${API_BASE}/worker-types`,
+        {
+          headers: { Authorization: `Bearer ${session.jwtToken}` },
+        },
+      );
+
+      setWorkerTypes((res.data.worker_types ?? []).filter((workerType) => workerType.isActive));
+    } catch (error) {
+      console.error("Error fetching worker types:", error);
+      setWorkerTypes([]);
+    }
+  }, [session]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchUsers();
     void fetchDepartments();
     void fetchSeniorities();
-  }, [fetchDepartments, fetchSeniorities, fetchUsers]);
+    void fetchWorkerTypes();
+  }, [fetchDepartments, fetchSeniorities, fetchUsers, fetchWorkerTypes]);
 
   const analytics = useMemo(() => {
     const roleCounts = users.reduce<Record<string, number>>((acc, user) => {
@@ -253,6 +290,8 @@ export default function UserManagementPage() {
         user.id,
         getSeniorityLabel(user.seniority),
         user.seniority?.code ?? "",
+        user.workerType?.name ?? "",
+        user.workerType?.code ?? "",
         ...user.departments.map((department) => department.name),
       ];
 
@@ -275,6 +314,7 @@ export default function UserManagementPage() {
         phone: formData.phone.trim() === "" ? null : formData.phone.trim(),
         department_ids: isStaffRole(formData.role) ? formData.department_ids : [],
         seniority_id: isStaffRole(formData.role) ? formData.seniority_id : null,
+        worker_type_id: isStaffRole(formData.role) ? formData.worker_type_id || null : null,
       };
 
       await axios.post(`${API_BASE}/users`, payload, {
@@ -286,6 +326,7 @@ export default function UserManagementPage() {
         ...defaultAddForm,
         department_ids: defaultDepartmentIds,
         seniority_id: defaultSeniorityId,
+        worker_type_id: defaultWorkerTypeId,
       });
       setShowSuccessModal(true);
       void fetchUsers();
@@ -303,6 +344,7 @@ export default function UserManagementPage() {
       ...defaultAddForm,
       department_ids: defaultDepartmentIds,
       seniority_id: defaultSeniorityId,
+      worker_type_id: defaultWorkerTypeId,
     });
     setShowAddForm(true);
   };
@@ -316,6 +358,7 @@ export default function UserManagementPage() {
       phone: user.phone ?? "",
       department_ids: user.departments.map((department) => department.id),
       seniority_id: user.seniority?.id ?? "",
+      worker_type_id: user.workerType?.id ?? "",
     });
   };
 
@@ -334,6 +377,7 @@ export default function UserManagementPage() {
           phone: editForm.phone.trim() === "" ? null : editForm.phone.trim(),
           department_ids: isStaffRole(editForm.role) ? editForm.department_ids : [],
           seniority_id: isStaffRole(editForm.role) ? editForm.seniority_id : null,
+          worker_type_id: isStaffRole(editForm.role) ? editForm.worker_type_id || null : null,
         },
         { headers: { Authorization: `Bearer ${session.jwtToken}` } },
       );
@@ -561,6 +605,9 @@ export default function UserManagementPage() {
                       seniority_id: isStaffRole(nextRole)
                         ? formData.seniority_id || defaultSeniorityId
                         : "",
+                      worker_type_id: isStaffRole(nextRole)
+                        ? formData.worker_type_id || defaultWorkerTypeId
+                        : "",
                     });
                   }}
                 >
@@ -610,6 +657,25 @@ export default function UserManagementPage() {
                   {seniorities.map((seniority) => (
                     <option key={seniority.id} value={seniority.id}>
                       {getSeniorityLabel(seniority)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">סוג עובד</label>
+                <select
+                  disabled={!isStaffRole(formData.role)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1d5c8b] disabled:bg-slate-50 disabled:text-slate-400"
+                  value={formData.worker_type_id}
+                  onChange={(e) =>
+                    setFormData({ ...formData, worker_type_id: e.target.value })
+                  }
+                >
+                  <option value="">בחר סוג עובד</option>
+                  {workerTypes.map((workerType) => (
+                    <option key={workerType.id} value={workerType.id}>
+                      {workerType.name}
                     </option>
                   ))}
                 </select>
@@ -697,6 +763,7 @@ export default function UserManagementPage() {
                   <th className="px-6 py-4 font-semibold">שם</th>
                   <th className="px-6 py-4 font-semibold">תפקיד</th>
                   <th className="px-6 py-4 font-semibold">ותק</th>
+                  <th className="px-6 py-4 font-semibold">סוג עובד</th>
                   <th className="px-6 py-4 font-semibold">מחלקות</th>
                   <th className="px-6 py-4 font-semibold">טלפון</th>
                   <th className="px-6 py-4 font-semibold">אימייל</th>
@@ -708,7 +775,7 @@ export default function UserManagementPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-6 py-10 text-center text-slate-500"
                     >
                       <LoadingState label="טוען משתמשים..." className="p-0" />
@@ -717,7 +784,7 @@ export default function UserManagementPage() {
                 ) : filteredUsers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-6 py-10 text-center text-slate-500"
                     >
                       לא נמצאו משתמשים
@@ -738,6 +805,9 @@ export default function UserManagementPage() {
                       <td className="px-6 py-4">{getRoleLabel(u.role)}</td>
                       <td className="px-6 py-4 text-slate-600">
                         {getSeniorityLabel(u.seniority)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {u.workerType?.name ?? "—"}
                       </td>
                       <td className="px-6 py-4">
                         <DepartmentChips departments={u.departments} />
@@ -791,6 +861,9 @@ export default function UserManagementPage() {
                         <p className="text-xs text-slate-500">
                           {formatRoleLabel(u.role)} · {getSeniorityLabel(u.seniority)}
                         </p>
+                        {u.workerType ? (
+                          <p className="text-xs text-slate-500">{u.workerType.name}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -899,6 +972,9 @@ export default function UserManagementPage() {
                       seniority_id: isStaffRole(nextRole)
                         ? editForm.seniority_id || defaultSeniorityId
                         : "",
+                      worker_type_id: isStaffRole(nextRole)
+                        ? editForm.worker_type_id || defaultWorkerTypeId
+                        : "",
                     });
                   }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl"
@@ -947,6 +1023,24 @@ export default function UserManagementPage() {
                   {seniorities.map((seniority) => (
                     <option key={seniority.id} value={seniority.id}>
                       {getSeniorityLabel(seniority)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">סוג עובד</label>
+                <select
+                  disabled={!isStaffRole(editForm.role)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl disabled:bg-slate-50 disabled:text-slate-400"
+                  value={editForm.worker_type_id}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, worker_type_id: e.target.value })
+                  }
+                >
+                  <option value="">בחר סוג עובד</option>
+                  {workerTypes.map((workerType) => (
+                    <option key={workerType.id} value={workerType.id}>
+                      {workerType.name}
                     </option>
                   ))}
                 </select>

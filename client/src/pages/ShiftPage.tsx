@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Navigate, useNavigate } from "react-router-dom";
-import { AlertTriangle, Building2, CalendarDays, RefreshCcw, Users } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, FileUp, RefreshCcw, Users } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
 import ResizableSplit from "../components/ui/ResizableSplit";
@@ -66,6 +66,8 @@ export default function ShiftPage() {
   const [monthPlan, setMonthPlan] = useState<MonthPlan | null>(null);
   const [loadingMonthPlan, setLoadingMonthPlan] = useState(false);
   const [monthPlanError, setMonthPlanError] = useState("");
+  const [importingExcel, setImportingExcel] = useState(false);
+  const [excelImportMessage, setExcelImportMessage] = useState("");
 
   const splitPct = useStoredNumber("planli:controlRoomSplitPct", 38, {
     min: 26,
@@ -141,6 +143,38 @@ export default function ShiftPage() {
     [authHeaders, getApiErrorMessage, month, token],
   );
 
+  const handleExcelImport = useCallback(
+    async (file: File) => {
+      if (!token) return;
+      try {
+        setImportingExcel(true);
+        setExcelImportMessage("");
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const workbookBase64 = dataUrl.split(",", 2)[1] ?? "";
+        await axios.post(
+          `${API_BASE}/imports/excel/month`,
+          {
+            workbook_base64: workbookBase64,
+            month,
+          },
+          { headers: authHeaders },
+        );
+        setExcelImportMessage("האקסל יובא בהצלחה");
+        await fetchDeptStatuses();
+      } catch (e: unknown) {
+        setExcelImportMessage(getApiErrorMessage(e, "שגיאה בייבוא האקסל"));
+      } finally {
+        setImportingExcel(false);
+      }
+    },
+    [authHeaders, fetchDeptStatuses, getApiErrorMessage, month, token],
+  );
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchDeptStatuses();
@@ -194,8 +228,34 @@ export default function ShiftPage() {
               )}
               רענן סטטוס
             </button>
+
+            <label className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 inline-flex items-center gap-2 shadow-sm cursor-pointer">
+              {importingExcel ? (
+                <LoadingSpinner className="w-4 h-4 text-[#1d5c8b]" />
+              ) : (
+                <FileUp className="w-4 h-4 text-slate-500" />
+              )}
+              ייבוא אקסל
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={importingExcel}
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void handleExcelImport(file);
+                }}
+              />
+            </label>
           </div>
         </header>
+
+        {excelImportMessage ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            {excelImportMessage}
+          </div>
+        ) : null}
 
         <ResizableSplit
           direction="horizontal"

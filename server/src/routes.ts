@@ -14,6 +14,9 @@ import { seniorityController } from "./controllers/seniority.controller.js";
 import { shiftController } from "./controllers/shift.controller.js";
 import { scheduleController } from "./controllers/schedule.controller.js";
 import { calendarController } from "./controllers/calendar.controller.js";
+import { importController } from "./controllers/import.controller.js";
+import { monthController } from "./controllers/month.controller.js";
+import { workerTypeController } from "./controllers/worker-type.controller.js";
 import { requireAuth } from "./middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -36,10 +39,46 @@ router.put("/api/users/:userId", requireAuth, userController.updateUser);
 router.delete("/api/users/:userId", requireAuth, userController.deleteUser);
 
 router.get("/api/departments", requireAuth, departmentController.listDepartments);
+router.get("/api/departments/status", requireAuth, departmentController.listDepartmentStatuses);
+router.get(
+  "/api/departments/:departmentId/month-plan",
+  requireAuth,
+  departmentController.getDepartmentMonthPlan,
+);
 router.post("/api/departments", requireAuth, departmentController.createDepartment);
 router.put("/api/departments/:departmentId", requireAuth, departmentController.updateDepartment);
 
 router.get("/api/seniorities", requireAuth, seniorityController.listSeniorities);
+router.get("/api/worker-types", requireAuth, workerTypeController.listWorkerTypes);
+router.post("/api/worker-types", requireAuth, workerTypeController.createWorkerType);
+router.put("/api/worker-types/:workerTypeId", requireAuth, workerTypeController.updateWorkerType);
+
+router.post("/api/imports/excel/month", requireAuth, importController.importExcelMonth);
+
+router.get("/api/months", requireAuth, monthController.listMonths);
+router.post("/api/months", requireAuth, monthController.createMonth);
+router.post(
+  "/api/months/:monthStart/open-collection",
+  requireAuth,
+  monthController.openCollection,
+);
+router.post("/api/months/:monthStart/lock", requireAuth, monthController.lockMonth);
+router.post("/api/months/:monthStart/solve", requireAuth, monthController.queueSolveMonth);
+router.get("/api/months/:monthStart/solve-runs", requireAuth, monthController.listRunsByMonth);
+router.get(
+  "/api/months/:monthStart/schedule-versions",
+  requireAuth,
+  monthController.listVersionsByMonth,
+);
+router.post(
+  "/api/monthly-schedule-versions/:versionId/publish",
+  requireAuth,
+  monthController.publishScheduleVersion,
+);
+
+router.post("/api/monthly-shifts", requireAuth, monthController.createShift);
+router.put("/api/monthly-shifts/:shiftId", requireAuth, monthController.updateShift);
+router.delete("/api/monthly-shifts/:shiftId", requireAuth, monthController.deleteShift);
 
 router.get("/api/weeks", requireAuth, shiftController.listWeeks);
 router.post("/api/weeks", requireAuth, shiftController.createWeek);

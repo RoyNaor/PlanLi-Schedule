@@ -285,6 +285,51 @@ class SolverServiceTests(unittest.TestCase):
         self.assertEqual(counts, {"midwife_1": 2, "midwife_2": 2})
         self.assertEqual(body["solver_meta"]["fairness_imbalance"], 0)
 
+    def test_monthly_same_real_worker_cannot_cover_overlapping_eligibilities(self):
+        payload = {
+            "month": "2026-05",
+            "workers": [
+                {"id": "u1:senior", "user_id": "u1", "worker_type": "senior", "seniority": 5},
+                {"id": "u1:resident", "user_id": "u1", "worker_type": "resident", "seniority": 5},
+                {"id": "u2:senior", "user_id": "u2", "worker_type": "senior", "seniority": 1},
+                {"id": "u3:resident", "user_id": "u3", "worker_type": "resident", "seniority": 1},
+            ],
+            "shifts": [
+                {
+                    "id": "delivery_day",
+                    "department_id": "delivery",
+                    "arrangement_id": "day",
+                    "shift_date": "2026-05-07",
+                    "start_time": "08:00",
+                    "end_time": "16:00",
+                    "requirements": [{"worker_type": "senior", "count": 1}],
+                },
+                {
+                    "id": "gyn_day",
+                    "department_id": "gyn",
+                    "arrangement_id": "day",
+                    "shift_date": "2026-05-07",
+                    "start_time": "08:00",
+                    "end_time": "16:00",
+                    "requirements": [{"worker_type": "resident", "count": 1}],
+                },
+            ],
+        }
+
+        response = self.client.post("/solve-month", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["status"], "feasible")
+        self.assertEqual(len(body["assignments"]), 2)
+        self.assertLessEqual(
+            sum(1 for assignment in body["assignments"] if assignment["user_id"] == "u1"),
+            1,
+        )
+        self.assertTrue(
+            all("solver_worker_id" in assignment for assignment in body["assignments"])
+        )
+
     def test_monthly_soft_worker_state_uses_seniority_weighting(self):
         payload = {
             "month": "2026-05",

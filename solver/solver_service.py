@@ -478,6 +478,8 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
         ordered_shift_ids.append(shift_id)
 
     worker_by_id: dict[str, dict[str, Any]] = {}
+    worker_real_id: dict[str, str] = {}
+    workers_by_real_id: dict[str, list[str]] = {}
     worker_type: dict[str, str] = {}
     worker_seniority: dict[str, int] = {}
     worker_departments: dict[str, set[str] | None] = {}
@@ -486,7 +488,15 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
 
     for worker in workers:
         worker_id = normalize_worker_id(worker)
+        real_id = str(
+            worker.get("user_id")
+            or worker.get("person_id")
+            or worker.get("staff_id")
+            or worker_id
+        )
         worker_by_id[worker_id] = worker
+        worker_real_id[worker_id] = real_id
+        workers_by_real_id.setdefault(real_id, []).append(worker_id)
         worker_type[worker_id] = normalize_worker_type(worker)
         worker_seniority[worker_id] = as_int(worker.get("seniority", 0))
         worker_departments[worker_id] = normalize_worker_departments(worker)
@@ -556,16 +566,21 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
             model.Add(sum(role_vars) == required_count)
 
     # One worker cannot be in two departments/arrangements at overlapping times.
-    for worker_id in worker_by_id.keys():
-        worker_shift_ids = [shift_id for shift_id in ordered_shift_ids if (worker_id, shift_id) in assignment_vars]
-        for i in range(len(worker_shift_ids)):
-            s1 = worker_shift_ids[i]
+    for real_worker_ids in workers_by_real_id.values():
+        worker_shift_pairs = [
+            (worker_id, shift_id)
+            for worker_id in real_worker_ids
+            for shift_id in ordered_shift_ids
+            if (worker_id, shift_id) in assignment_vars
+        ]
+        for i in range(len(worker_shift_pairs)):
+            w1, s1 = worker_shift_pairs[i]
             s1_start, s1_end = shift_windows[s1]
-            for j in range(i + 1, len(worker_shift_ids)):
-                s2 = worker_shift_ids[j]
+            for j in range(i + 1, len(worker_shift_pairs)):
+                w2, s2 = worker_shift_pairs[j]
                 s2_start, s2_end = shift_windows[s2]
                 if intervals_overlap(s1_start, s1_end, s2_start, s2_end):
-                    model.Add(assignment_vars[(worker_id, s1)] + assignment_vars[(worker_id, s2)] <= 1)
+                    model.Add(assignment_vars[(w1, s1)] + assignment_vars[(w2, s2)] <= 1)
 
     soft_penalty_terms: list[Any] = []
     soft_penalties: list[dict[str, Any]] = []
@@ -587,8 +602,13 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
 
     # User constraints: HARD blocks, SOFT uses seniority-weighted penalty.
     for c in constraints:
-        worker_id = str(c.get("worker_id") or c.get("user_id"))
-        if worker_id not in worker_by_id:
+        raw_worker_id = str(c.get("worker_id") or c.get("user_id"))
+        constrained_worker_ids = (
+            [raw_worker_id]
+            if raw_worker_id in worker_by_id
+            else workers_by_real_id.get(raw_worker_id, [])
+        )
+        if not constrained_worker_ids:
             continue
 
         c_start, c_end = parse_timed_record_window(c, "constraint")
@@ -596,21 +616,27 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
             continue
 
         priority = normalize_priority(c.get("priority", "SOFT")) or "SOFT"
-        for shift_id, (s_start, s_end) in shift_windows.items():
-            var = assignment_vars.get((worker_id, shift_id))
-            if var is None or not intervals_overlap(c_start, c_end, s_start, s_end):
-                continue
+        for worker_id in constrained_worker_ids:
+            for shift_id, (s_start, s_end) in shift_windows.items():
+                var = assignment_vars.get((worker_id, shift_id))
+                if var is None or not intervals_overlap(c_start, c_end, s_start, s_end):
+                    continue
 
-            if priority == "HARD":
-                model.Add(var == 0)
-            else:
-                add_soft_preference(var, worker_id, "constraint", c)
+                if priority == "HARD":
+                    model.Add(var == 0)
+                else:
+                    add_soft_preference(var, worker_id, "constraint", c)
 
     # Worker states from the monthly model / Excel import:
     # hard states block, soft requests become seniority-weighted preferences.
     for state in worker_states:
-        worker_id = str(state.get("worker_id") or state.get("user_id"))
-        if worker_id not in worker_by_id:
+        raw_worker_id = str(state.get("worker_id") or state.get("user_id"))
+        state_worker_ids = (
+            [raw_worker_id]
+            if raw_worker_id in worker_by_id
+            else workers_by_real_id.get(raw_worker_id, [])
+        )
+        if not state_worker_ids:
             continue
 
         state_start, state_end = parse_timed_record_window(state, "worker state")
@@ -621,15 +647,16 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
         if effect == "ignore":
             continue
 
-        for shift_id, (s_start, s_end) in shift_windows.items():
-            var = assignment_vars.get((worker_id, shift_id))
-            if var is None or not intervals_overlap(state_start, state_end, s_start, s_end):
-                continue
-            if effect == "hard":
-                model.Add(var == 0)
-                hard_state_blocks += 1
-            elif effect == "soft":
-                add_soft_preference(var, worker_id, "worker_state", state)
+        for worker_id in state_worker_ids:
+            for shift_id, (s_start, s_end) in shift_windows.items():
+                var = assignment_vars.get((worker_id, shift_id))
+                if var is None or not intervals_overlap(state_start, state_end, s_start, s_end):
+                    continue
+                if effect == "hard":
+                    model.Add(var == 0)
+                    hard_state_blocks += 1
+                elif effect == "soft":
+                    add_soft_preference(var, worker_id, "worker_state", state)
 
     # Monthly fairness: equalize total shift count between workers of the same worker_type.
     fairness_terms: list[cp_model.IntVar] = []
@@ -696,11 +723,13 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
         if solver.Value(var) != 1:
             continue
         shift = shift_by_id[shift_id]
+        real_user_id = worker_real_id[worker_id]
         assignments.append(
             {
                 "shift_id": shift_id,
-                "user_id": worker_id,
-                "worker_id": worker_id,
+                "user_id": real_user_id,
+                "worker_id": real_user_id,
+                "solver_worker_id": worker_id,
                 "worker_type": worker_type[worker_id],
                 "department_id": shift.get("department_id"),
                 "arrangement_id": shift.get("arrangement_id"),

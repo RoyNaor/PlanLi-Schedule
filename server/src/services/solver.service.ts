@@ -4,8 +4,13 @@ const solverResponseSchema = z.object({
   status: z.enum(["feasible", "infeasible"]),
   assignments: z.array(
     z.object({
-      shift_id: z.number().int().positive(),
+      shift_id: z.union([z.number().int().positive(), z.string().min(1)]),
       user_id: z.string().min(1),
+      worker_id: z.string().min(1).optional(),
+      solver_worker_id: z.string().min(1).optional(),
+      worker_type: z.string().min(1).optional(),
+      department_id: z.string().min(1).nullable().optional(),
+      arrangement_id: z.string().min(1).nullable().optional(),
     }),
   ),
   message: z.string().optional(),
@@ -51,7 +56,7 @@ function getSolverHeaders(): Record<string, string> {
 }
 
 async function fetchSolverJson(
-  path: "/health" | "/solve",
+  path: "/health" | "/solve" | "/solve-month",
   init: Omit<RequestInit, "headers" | "signal"> = {},
 ): Promise<unknown> {
   const controller = new AbortController();
@@ -104,6 +109,20 @@ export const SolverService = {
     const validated = solverResponseSchema.safeParse(parsedBody);
     if (!validated.success) {
       throw new Error("Solver response did not match expected schema");
+    }
+
+    return validated.data;
+  },
+
+  async solveMonth(payload: Record<string, unknown>): Promise<SolverResponse> {
+    const parsedBody = await fetchSolverJson("/solve-month", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    const validated = solverResponseSchema.safeParse(parsedBody);
+    if (!validated.success) {
+      throw new Error("Solver monthly response did not match expected schema");
     }
 
     return validated.data;

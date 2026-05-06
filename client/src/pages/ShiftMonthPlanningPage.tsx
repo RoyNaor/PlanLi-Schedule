@@ -7,29 +7,28 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Lock,
   RefreshCcw,
   Send,
   Sparkles,
   Trash2,
+  Users,
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
-import ShiftFormModal from "../components/shifts/ShiftFormModal";
-import CollectionDeadlineModal from "../components/shifts/CollectionDeadlineModal";
-import type { Shift, WeekStatus, WeekSummary } from "../components/types";
-import { staffingFields, type StaffingField } from "../utils/staffing";
+import MonthlyShiftFormModal, {
+  type MonthlyShiftFormValues,
+} from "../components/shifts/MonthlyShiftFormModal";
+import type { Shift, WorkerType } from "../components/types";
 import {
   addMonthsToIsoDate,
   firstOfMonthIso,
   getCalendarMonthMatrix,
   getJerusalemTodayIsoDate,
-  getWeekStartsOverlappingRange,
-  lastOfMonthIso,
   normalizeApiDateToIso,
   normalizeApiTimeToHourMinute,
   parseIsoDateToUtc,
-  startOfWeekSundayIso,
 } from "../utils/date.utils";
 
 const API_BASE = "http://localhost:3000/api";
@@ -46,36 +45,12 @@ const dayNumberFormatter = new Intl.DateTimeFormat("he-IL", {
   timeZone: ISRAEL_TIMEZONE,
 });
 
-const weekStatusLabel: Record<WeekStatus, string> = {
-  DRAFT: "טיוטה",
-  COLLECTING: "איסוף אילוצים",
-  LOCKED: "נעול",
-  SOLVED: "שובץ",
-  PUBLISHED: "פורסם",
-};
-
-const weekStatusStyle: Record<WeekStatus, string> = {
-  DRAFT: "bg-slate-100 text-slate-600",
-  COLLECTING: "bg-blue-100 text-blue-800",
-  LOCKED: "bg-amber-100 text-amber-800",
-  SOLVED: "bg-teal-100 text-teal-800",
-  PUBLISHED: "bg-green-100 text-green-800",
-};
-
-function getApiErrorMessage(error: unknown, fallback: string) {
-  if (!axios.isAxiosError(error)) return fallback;
-  const data = error.response?.data;
-  if (!data || typeof data !== "object") return fallback;
-  if (!("error" in data)) return fallback;
-  const record = data as Record<string, unknown>;
-  return typeof record.error === "string" ? record.error : fallback;
-}
-
 type MonthPlanResponse = {
   department: { id: string; name: string; code: string };
-  month: string; // YYYY-MM
+  month: string;
+  timezone?: string;
   days: Array<{
-    date: string; // YYYY-MM-DD
+    date: string;
     shifts: Shift[];
   }>;
 };
@@ -88,6 +63,43 @@ type VersionSummary = {
   assignmentCount: number;
 };
 
+type RunSummary = {
+  id: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  createdAt: string;
+  errorMessage: string | null;
+};
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (!axios.isAxiosError(error)) return fallback;
+  const data = error.response?.data;
+  if (!data || typeof data !== "object" || !("error" in data)) return fallback;
+  const record = data as Record<string, unknown>;
+  return typeof record.error === "string" ? record.error : fallback;
+}
+
+function monthStartFromMonth(month: string) {
+  return `${month}-01`;
+}
+
+function withLegacyStaffingDefaults(shift: Shift): Shift {
+  return {
+    ...shift,
+    shiftDate: normalizeApiDateToIso(shift.shiftDate),
+    startTime: normalizeApiTimeToHourMinute(shift.startTime) || shift.startTime,
+    endTime: normalizeApiTimeToHourMinute(shift.endTime) || shift.endTime,
+    minDoctors: shift.minDoctors ?? 0,
+    minNurses: shift.minNurses ?? 0,
+    minMidwives: shift.minMidwives ?? 0,
+    minObgyns: shift.minObgyns ?? 0,
+    minAnesthesiologists: shift.minAnesthesiologists ?? 0,
+    minOrderlies: shift.minOrderlies ?? 0,
+    minPediatricians: shift.minPediatricians ?? 0,
+    minShabbatScribes: shift.minShabbatScribes ?? 0,
+    minSecretaries: shift.minSecretaries ?? 0,
+  };
+}
+
 export default function ShiftMonthPlanningPage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
@@ -98,20 +110,14 @@ export default function ShiftMonthPlanningPage() {
   const [monthPlan, setMonthPlan] = useState<MonthPlanResponse | null>(null);
   const [loadingMonthPlan, setLoadingMonthPlan] = useState(true);
   const [monthPlanError, setMonthPlanError] = useState("");
-
-  const [weeks, setWeeks] = useState<WeekSummary[]>([]);
-  const [loadingWeeks, setLoadingWeeks] = useState(true);
-
-  const [versionsByWeek, setVersionsByWeek] = useState<Record<string, VersionSummary[]>>({});
-  const [loadingVersionsWeekStart, setLoadingVersionsWeekStart] = useState<string>("");
-
-  const [publishingVersionId, setPublishingVersionId] = useState<string>("");
-  const [solvingWeekStart, setSolvingWeekStart] = useState<string>("");
-  const [lockingWeekStart, setLockingWeekStart] = useState<string>("");
-
-  const [showCollectionDeadlineModal, setShowCollectionDeadlineModal] = useState(false);
-  const [collectionWeekStart, setCollectionWeekStart] = useState<string>("");
-
+  const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+  const [openingCollection, setOpeningCollection] = useState(false);
+  const [lockingMonth, setLockingMonth] = useState(false);
+  const [solvingMonth, setSolvingMonth] = useState(false);
+  const [publishingVersionId, setPublishingVersionId] = useState("");
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [shiftModalMode, setShiftModalMode] = useState<"create" | "edit">("create");
   const [draftShiftDate, setDraftShiftDate] = useState("");
@@ -125,31 +131,15 @@ export default function ShiftMonthPlanningPage() {
   const month = useMemo(() => {
     const q = searchParams.get("month");
     if (q && /^\d{4}-\d{2}$/.test(q)) return q;
-    const today = getJerusalemTodayIsoDate();
-    return today.slice(0, 7);
+    return getJerusalemTodayIsoDate().slice(0, 7);
   }, [searchParams]);
 
-  const monthAnchorIso = useMemo(() => `${month}-01`, [month]);
-
+  const monthStart = useMemo(() => monthStartFromMonth(month), [month]);
+  const monthCells = useMemo(() => getCalendarMonthMatrix(monthStart), [monthStart]);
   const monthTitle = useMemo(() => {
-    const parsed = new Date(`${month}-01T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return month;
-    return monthTitleFormatter.format(parsed);
-  }, [month]);
-
-  const monthFirstIso = useMemo(() => firstOfMonthIso(monthAnchorIso), [monthAnchorIso]);
-  const monthLastIso = useMemo(() => lastOfMonthIso(monthAnchorIso), [monthAnchorIso]);
-
-  const monthCells = useMemo(() => getCalendarMonthMatrix(monthAnchorIso), [monthAnchorIso]);
-
-  const weekStartsInMonth = useMemo(() => {
-    if (!monthFirstIso || !monthLastIso) return [];
-    return getWeekStartsOverlappingRange(monthFirstIso, monthLastIso);
-  }, [monthFirstIso, monthLastIso]);
-
-  const weeksByStart = useMemo(() => {
-    return Object.fromEntries(weeks.map((w) => [w.weekStart, w])) as Record<string, WeekSummary>;
-  }, [weeks]);
+    const parsed = new Date(`${monthStart}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? month : monthTitleFormatter.format(parsed);
+  }, [month, monthStart]);
 
   const shiftsByDate = useMemo(() => {
     const map = new Map<string, Shift[]>();
@@ -157,7 +147,9 @@ export default function ShiftMonthPlanningPage() {
       map.set(day.date, day.shifts ?? []);
     }
     return map;
-  }, [monthPlan?.days]);
+  }, [monthPlan]);
+
+  const latestVersion = versions[0] ?? null;
 
   const setMonthParam = (nextMonth: string) => {
     const params = new URLSearchParams(searchParams);
@@ -165,24 +157,12 @@ export default function ShiftMonthPlanningPage() {
     setSearchParams(params, { replace: true });
   };
 
-  const fetchWeeks = useCallback(async () => {
+  const fetchWorkerTypes = useCallback(async () => {
     if (!token) return;
-    try {
-      setLoadingWeeks(true);
-      const res = await axios.get<{ weeks: WeekSummary[] }>(`${API_BASE}/weeks`, {
-        headers: authHeaders,
-      });
-      setWeeks(
-        (res.data.weeks ?? []).map((w) => ({
-          ...w,
-          weekStart: normalizeApiDateToIso(w.weekStart),
-        })),
-      );
-    } catch {
-      setWeeks([]);
-    } finally {
-      setLoadingWeeks(false);
-    }
+    const res = await axios.get<{ worker_types: WorkerType[] }>(`${API_BASE}/worker-types`, {
+      headers: authHeaders,
+    });
+    setWorkerTypes(res.data.worker_types ?? []);
   }, [authHeaders, token]);
 
   const fetchMonthPlan = useCallback(async () => {
@@ -195,38 +175,58 @@ export default function ShiftMonthPlanningPage() {
         { headers: authHeaders },
       );
 
-      const normalized: MonthPlanResponse = {
+      setMonthPlan({
         ...res.data,
-        days: (res.data.days ?? []).map((d) => ({
-          ...d,
-          date: normalizeApiDateToIso(d.date),
-          shifts: (d.shifts ?? []).map((s) => ({
-            ...s,
-            weekStart: normalizeApiDateToIso(s.weekStart),
-            shiftDate: normalizeApiDateToIso(s.shiftDate),
-            startTime: normalizeApiTimeToHourMinute(s.startTime) || s.startTime,
-            endTime: normalizeApiTimeToHourMinute(s.endTime) || s.endTime,
-          })),
+        days: (res.data.days ?? []).map((day) => ({
+          ...day,
+          date: normalizeApiDateToIso(day.date),
+          shifts: (day.shifts ?? []).map(withLegacyStaffingDefaults),
         })),
-      };
-      setMonthPlan(normalized);
-    } catch (e: unknown) {
+      });
+    } catch (error: unknown) {
       setMonthPlan(null);
-      setMonthPlanError(getApiErrorMessage(e, "שגיאה בטעינת תוכנית חודשית"));
+      setMonthPlanError(getApiErrorMessage(error, "שגיאה בטעינת התוכנית החודשית"));
     } finally {
       setLoadingMonthPlan(false);
     }
   }, [authHeaders, departmentId, month, token]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchWeeks();
-  }, [fetchWeeks]);
+  const fetchMonthMeta = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLoadingMeta(true);
+      const [versionsRes, runsRes] = await Promise.all([
+        axios.get<{ versions: VersionSummary[] }>(
+          `${API_BASE}/months/${monthStart}/schedule-versions`,
+          { headers: authHeaders },
+        ),
+        axios.get<{ runs: RunSummary[] }>(
+          `${API_BASE}/months/${monthStart}/solve-runs`,
+          { headers: authHeaders },
+        ),
+      ]);
+      setVersions(versionsRes.data.versions ?? []);
+      setRuns(runsRes.data.runs ?? []);
+    } catch {
+      setVersions([]);
+      setRuns([]);
+    } finally {
+      setLoadingMeta(false);
+    }
+  }, [authHeaders, monthStart, token]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchWorkerTypes();
+  }, [fetchWorkerTypes]);
+
+  useEffect(() => {
     void fetchMonthPlan();
-  }, [fetchMonthPlan]);
+    void fetchMonthMeta();
+  }, [fetchMonthMeta, fetchMonthPlan]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchMonthPlan(), fetchMonthMeta(), fetchWorkerTypes()]);
+  }, [fetchMonthMeta, fetchMonthPlan, fetchWorkerTypes]);
 
   const handleAddShift = (isoDate: string) => {
     setShiftModalMode("create");
@@ -243,182 +243,114 @@ export default function ShiftMonthPlanningPage() {
   };
 
   const handleSubmitShift = useCallback(
-    async (
-      values: {
-        shiftDate: string;
-        startTime: string;
-        endTime: string;
-      } & Record<StaffingField, number>,
-    ) => {
-      if (!token) return;
-
-      const weekStart = startOfWeekSundayIso(values.shiftDate);
-      if (!weekStart) {
-        alert("תאריך משמרת לא תקין.");
-        return;
-      }
-
-      const normalizedStartTime = normalizeApiTimeToHourMinute(values.startTime);
-      const normalizedEndTime = normalizeApiTimeToHourMinute(values.endTime);
-      if (!normalizedStartTime || !normalizedEndTime) {
-        alert("שעת התחלה ושעת סיום חייבות להיות בפורמט HH:mm.");
-        return;
-      }
+    async (values: MonthlyShiftFormValues) => {
+      if (!token || !departmentId) return;
 
       const payload = {
-        week_start: weekStart,
+        month_start: monthStart,
+        department_id: departmentId,
+        arrangement_id: shiftModalMode === "edit" ? shiftToEdit?.arrangementId ?? null : null,
         shift_date: values.shiftDate,
-        start_time: normalizedStartTime,
-        end_time: normalizedEndTime,
-        ...Object.fromEntries(
-          staffingFields.map((field) => [field.apiField, values[field.field]]),
-        ),
+        start_time: values.startTime,
+        end_time: values.endTime,
+        label: values.label || null,
+        requirements: values.requirements.map((requirement) => ({
+          worker_type_id: requirement.workerTypeId,
+          count: requirement.count,
+        })),
       };
 
-      try {
-        if (shiftModalMode === "create") {
-          await axios.post(`${API_BASE}/shifts`, payload, { headers: authHeaders });
-        } else if (shiftToEdit) {
-          await axios.put(
-            `${API_BASE}/shifts/${shiftToEdit.id}`,
-            {
-              shift_date: payload.shift_date,
-              start_time: payload.start_time,
-              end_time: payload.end_time,
-              ...Object.fromEntries(
-                staffingFields.map((field) => [field.apiField, values[field.field]]),
-              ),
-            },
-            { headers: authHeaders },
-          );
-        }
-      } catch (e: unknown) {
-        alert(`שגיאה בשמירת משמרת: ${getApiErrorMessage(e, "שגיאה לא ידועה")}`);
-        throw e;
+      if (shiftModalMode === "create") {
+        await axios.post(`${API_BASE}/monthly-shifts`, payload, { headers: authHeaders });
+      } else if (shiftToEdit) {
+        await axios.put(`${API_BASE}/monthly-shifts/${shiftToEdit.id}`, {
+          arrangement_id: payload.arrangement_id,
+          shift_date: payload.shift_date,
+          start_time: payload.start_time,
+          end_time: payload.end_time,
+          label: payload.label,
+          requirements: payload.requirements,
+        }, { headers: authHeaders });
       }
 
-      await fetchMonthPlan();
-      await fetchWeeks();
+      await refreshAll();
     },
-    [authHeaders, fetchMonthPlan, fetchWeeks, shiftModalMode, shiftToEdit, token],
+    [authHeaders, departmentId, monthStart, refreshAll, shiftModalMode, shiftToEdit, token],
   );
 
   const handleDeleteShift = useCallback(
     async (shift: Shift) => {
-      const ok = window.confirm("למחוק את המשמרת הזו?");
-      if (!ok) return;
-      try {
-        await axios.delete(`${API_BASE}/shifts/${shift.id}`, { headers: authHeaders });
-      } catch (e: unknown) {
-        alert(`שגיאה במחיקת משמרת: ${getApiErrorMessage(e, "שגיאה לא ידועה")}`);
-        return;
-      }
-      await fetchMonthPlan();
-      await fetchWeeks();
+      if (!window.confirm("למחוק את המשמרת הזו?")) return;
+      await axios.delete(`${API_BASE}/monthly-shifts/${shift.id}`, { headers: authHeaders });
+      await refreshAll();
     },
-    [authHeaders, fetchMonthPlan, fetchWeeks],
+    [authHeaders, refreshAll],
   );
 
-  const ensureWeekExists = useCallback(
-    async (weekStart: string) => {
-      if (!token) return;
-      try {
-        await axios.post(
-          `${API_BASE}/weeks`,
-          { week_start: weekStart },
-          { headers: authHeaders },
-        );
-      } catch {
-        // ignore
-      }
-    },
-    [authHeaders, token],
-  );
+  const handleOpenCollection = useCallback(async () => {
+    const defaultDeadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const deadline = window.prompt("הכנס דדליין ISO לאיסוף אילוצים", defaultDeadline);
+    if (!deadline) return;
 
-  const openCollectionDeadline = (weekStart: string) => {
-    setCollectionWeekStart(weekStart);
-    setShowCollectionDeadlineModal(true);
-  };
+    try {
+      setOpeningCollection(true);
+      await axios.post(
+        `${API_BASE}/months/${monthStart}/open-collection`,
+        { collection_deadline: deadline },
+        { headers: authHeaders },
+      );
+      await refreshAll();
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, "שגיאה בפתיחת איסוף"));
+    } finally {
+      setOpeningCollection(false);
+    }
+  }, [authHeaders, monthStart, refreshAll]);
 
-  const handleSolveWeek = useCallback(
-    async (weekStart: string) => {
-      if (!token) return;
-      try {
-        setSolvingWeekStart(weekStart);
-        await ensureWeekExists(weekStart);
-        await axios.post(`${API_BASE}/weeks/${weekStart}/solve`, {}, { headers: authHeaders });
-        await fetchWeeks();
-      } catch (e: unknown) {
-        alert(`שגיאה בהפעלת השיבוץ: ${getApiErrorMessage(e, "שגיאה לא ידועה")}`);
-      } finally {
-        setSolvingWeekStart("");
-      }
-    },
-    [authHeaders, ensureWeekExists, fetchWeeks, token],
-  );
+  const handleLockMonth = useCallback(async () => {
+    try {
+      setLockingMonth(true);
+      await axios.post(`${API_BASE}/months/${monthStart}/lock`, {}, { headers: authHeaders });
+      await refreshAll();
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, "שגיאה בנעילת החודש"));
+    } finally {
+      setLockingMonth(false);
+    }
+  }, [authHeaders, monthStart, refreshAll]);
 
-  const handleLockWeek = useCallback(
-    async (weekStart: string) => {
-      if (!token) return;
-      try {
-        setLockingWeekStart(weekStart);
-        await ensureWeekExists(weekStart);
-        await axios.post(`${API_BASE}/weeks/${weekStart}/lock`, {}, { headers: authHeaders });
-        await fetchWeeks();
-      } catch (e: unknown) {
-        alert(`שגיאה בנעילת השבוע: ${getApiErrorMessage(e, "שגיאה לא ידועה")}`);
-      } finally {
-        setLockingWeekStart("");
-      }
-    },
-    [authHeaders, ensureWeekExists, fetchWeeks, token],
-  );
+  const handleSolveMonth = useCallback(async () => {
+    try {
+      setSolvingMonth(true);
+      await axios.post(`${API_BASE}/months/${monthStart}/solve`, {}, { headers: authHeaders });
+      await refreshAll();
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, "שגיאה בהרצת השיבוץ"));
+    } finally {
+      setSolvingMonth(false);
+    }
+  }, [authHeaders, monthStart, refreshAll]);
 
-  const fetchVersionsForWeek = useCallback(
-    async (weekStart: string) => {
-      if (!token) return;
-      try {
-        setLoadingVersionsWeekStart(weekStart);
-        const res = await axios.get<{ versions: VersionSummary[] }>(
-          `${API_BASE}/weeks/${weekStart}/schedule-versions`,
-          { headers: authHeaders },
-        );
-        setVersionsByWeek((prev) => ({ ...prev, [weekStart]: res.data.versions ?? [] }));
-      } catch {
-        setVersionsByWeek((prev) => ({ ...prev, [weekStart]: [] }));
-      } finally {
-        setLoadingVersionsWeekStart("");
-      }
-    },
-    [authHeaders, token],
-  );
-
-  const handlePublishLatest = useCallback(
-    async (weekStart: string) => {
-      const versions = versionsByWeek[weekStart] ?? [];
-      const latest = versions[0];
-      if (!latest) return;
-      if (latest.isPublished) return;
-      try {
-        setPublishingVersionId(latest.id);
-        await axios.post(`${API_BASE}/schedule-versions/${latest.id}/publish`, {}, { headers: authHeaders });
-        await fetchWeeks();
-        await fetchVersionsForWeek(weekStart);
-      } catch (e: unknown) {
-        alert(`שגיאה בפרסום: ${getApiErrorMessage(e, "שגיאה לא ידועה")}`);
-      } finally {
-        setPublishingVersionId("");
-      }
-    },
-    [authHeaders, fetchVersionsForWeek, fetchWeeks, versionsByWeek],
-  );
+  const handlePublishLatest = useCallback(async () => {
+    if (!latestVersion || latestVersion.isPublished) return;
+    try {
+      setPublishingVersionId(latestVersion.id);
+      await axios.post(
+        `${API_BASE}/monthly-schedule-versions/${latestVersion.id}/publish`,
+        {},
+        { headers: authHeaders },
+      );
+      await refreshAll();
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, "שגיאה בפרסום השיבוץ"));
+    } finally {
+      setPublishingVersionId("");
+    }
+  }, [authHeaders, latestVersion, refreshAll]);
 
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
   if (!departmentId) return <Navigate to="/shifts" replace />;
-
-  const canGoPrevMonth = Boolean(monthFirstIso);
-  const canGoNextMonth = Boolean(monthFirstIso);
 
   return (
     <div dir="rtl" className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
@@ -431,7 +363,7 @@ export default function ShiftMonthPlanningPage() {
               className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
             >
               <ArrowRight className="w-4 h-4" />
-              חזרה לחדר בקרה
+              חזרה לחדר הבקרה
             </button>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
               תכנון חודשי · {monthTitle}
@@ -448,7 +380,7 @@ export default function ShiftMonthPlanningPage() {
             <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               <button
                 type="button"
-                onClick={() => canGoPrevMonth && setMonthParam(addMonthsToIsoDate(monthAnchorIso, -1).slice(0, 7))}
+                onClick={() => setMonthParam(addMonthsToIsoDate(monthStart, -1).slice(0, 7))}
                 className="w-10 h-10 inline-flex items-center justify-center hover:bg-slate-50"
                 aria-label="חודש קודם"
               >
@@ -459,14 +391,14 @@ export default function ShiftMonthPlanningPage() {
                 <input
                   type="month"
                   value={month}
-                  onChange={(e) => setMonthParam(e.target.value)}
+                  onChange={(event) => setMonthParam(event.target.value)}
                   className="bg-transparent outline-none font-bold text-slate-800"
                   aria-label="בחר חודש"
                 />
               </div>
               <button
                 type="button"
-                onClick={() => canGoNextMonth && setMonthParam(addMonthsToIsoDate(monthAnchorIso, 1).slice(0, 7))}
+                onClick={() => setMonthParam(addMonthsToIsoDate(monthStart, 1).slice(0, 7))}
                 className="w-10 h-10 inline-flex items-center justify-center hover:bg-slate-50"
                 aria-label="חודש הבא"
               >
@@ -476,16 +408,16 @@ export default function ShiftMonthPlanningPage() {
 
             <button
               type="button"
-              onClick={() => void fetchMonthPlan()}
-              disabled={loadingMonthPlan}
+              onClick={() => void refreshAll()}
+              disabled={loadingMonthPlan || loadingMeta}
               className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 shadow-sm"
             >
-              {loadingMonthPlan ? (
+              {loadingMonthPlan || loadingMeta ? (
                 <LoadingSpinner className="w-4 h-4 text-[#1d5c8b]" />
               ) : (
                 <RefreshCcw className="w-4 h-4 text-slate-500" />
               )}
-              רענן חודש
+              רענן
             </button>
           </div>
         </header>
@@ -496,15 +428,15 @@ export default function ShiftMonthPlanningPage() {
           </div>
         ) : null}
 
-        <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
               <div className="min-w-0">
                 <h2 className="font-extrabold text-slate-900">לוח חודש</h2>
-                <p className="text-xs text-slate-500 mt-0.5">הוספה/עריכה מהירה של משמרות לפי ימים.</p>
+                <p className="text-xs text-slate-500 mt-0.5">קליק על יום מוסיף משמרת למחלקה הנבחרת.</p>
               </div>
               <span className="text-xs text-slate-500 font-semibold">
-                גרירה לא נדרשת · קליק ליום
+                {workerTypes.length} סוגי עובדים
               </span>
             </div>
 
@@ -529,7 +461,7 @@ export default function ShiftMonthPlanningPage() {
                         key={cell.iso}
                         type="button"
                         onClick={() => handleAddShift(cell.iso)}
-                        className={`rounded-2xl border p-2 text-right transition-colors min-h-[88px] focus:outline-none focus:ring-2 focus:ring-[#1d5c8b] ${
+                        className={`rounded-2xl border p-2 text-right transition-colors min-h-[104px] focus:outline-none focus:ring-2 focus:ring-[#1d5c8b] ${
                           cell.inMonth ? "bg-white border-slate-200 hover:bg-slate-50" : "bg-slate-50 border-slate-100 opacity-70"
                         } ${isToday ? "ring-1 ring-[#1d5c8b]/20" : ""}`}
                         aria-label={`הוסף משמרת ל-${cell.iso}`}
@@ -546,21 +478,24 @@ export default function ShiftMonthPlanningPage() {
                         </div>
 
                         <div className="mt-2 space-y-1">
-                          {dayShifts.slice(0, 2).map((s) => (
+                          {dayShifts.slice(0, 2).map((shift) => (
                             <div
-                              key={String(s.id)}
+                              key={String(shift.id)}
                               className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1 text-[11px] text-slate-700"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleEditShift(s);
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleEditShift(shift);
                               }}
                               role="button"
                               tabIndex={0}
                             >
                               <div className="flex items-center justify-between gap-2" dir="ltr">
-                                <span className="font-semibold">{s.startTime}–{s.endTime}</span>
-                                <span className="text-slate-400">#{s.id}</span>
+                                <span className="font-semibold">{shift.startTime}–{shift.endTime}</span>
+                                <span className="text-slate-400">#{shift.id}</span>
+                              </div>
+                              <div className="truncate text-right mt-0.5">
+                                {shift.label ?? shift.arrangementName ?? "משמרת"}
                               </div>
                             </div>
                           ))}
@@ -580,171 +515,117 @@ export default function ShiftMonthPlanningPage() {
 
           <aside className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-4 py-4 border-b border-slate-200 bg-slate-50/70">
-              <h2 className="font-extrabold text-slate-900">כלי שבוע</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                פעולות איסוף/נעילה/שיבוץ/פרסום לפי שבוע בתוך החודש.
-              </p>
+              <h2 className="font-extrabold text-slate-900">פעולות חודשיות</h2>
+              <p className="text-xs text-slate-500 mt-0.5">איסוף אילוצים, נעילה, פתרון ופרסום לכל החודש.</p>
             </div>
 
-            <div className="p-3 space-y-2">
-              {loadingWeeks ? (
-                <LoadingState label="טוען שבועות..." className="p-6" />
-              ) : weekStartsInMonth.length === 0 ? (
-                <p className="text-sm text-slate-500 p-3">אין שבועות לחודש זה.</p>
-              ) : (
-                weekStartsInMonth.map((weekStart) => {
-                  const summary = weeksByStart[weekStart] ?? null;
-                  const status = summary?.status ?? "DRAFT";
-                  const deadline = summary?.collectionDeadline ?? null;
-                  const versions = versionsByWeek[weekStart] ?? null;
-                  const latest = versions?.[0] ?? null;
-                  const canPublish = Boolean(latest && !latest.isPublished);
-                  return (
-                    <div key={weekStart} className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-extrabold text-slate-900" dir="ltr">
-                            {weekStart}
-                          </p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            דדליין:{" "}
-                            <span className="font-semibold text-slate-700">
-                              {deadline ? normalizeApiDateToIso(deadline) : "לא נקבע"}
-                            </span>
-                          </p>
+            <div className="p-3 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleOpenCollection()}
+                  disabled={openingCollection}
+                  className="h-10 rounded-xl bg-[#1d5c8b] text-white text-xs font-bold hover:bg-[#164e78] disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {openingCollection ? <LoadingSpinner className="w-3.5 h-3.5" /> : <CalendarDays className="w-3.5 h-3.5" />}
+                  פתח איסוף
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLockMonth()}
+                  disabled={lockingMonth}
+                  className="h-10 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {lockingMonth ? <LoadingSpinner className="w-3.5 h-3.5 text-[#1d5c8b]" /> : <Lock className="w-3.5 h-3.5 text-slate-500" />}
+                  נעל חודש
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handleSolveMonth()}
+                disabled={solvingMonth}
+                className="w-full h-10 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              >
+                {solvingMonth ? <LoadingSpinner className="w-3.5 h-3.5 text-teal-700" /> : <Sparkles className="w-3.5 h-3.5 text-teal-700" />}
+                שיבוץ חכם לחודש
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handlePublishLatest()}
+                disabled={!latestVersion || latestVersion.isPublished || publishingVersionId === latestVersion.id}
+                className="w-full h-10 rounded-xl bg-[#1d5c8b] text-white text-xs font-bold hover:bg-[#164e78] disabled:opacity-40 inline-flex items-center justify-center gap-2"
+              >
+                {publishingVersionId === latestVersion?.id ? <LoadingSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                פרסם גרסה אחרונה
+              </button>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-extrabold text-slate-900">גרסאות</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchMonthMeta()}
+                    disabled={loadingMeta}
+                    className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600"
+                  >
+                    רענן
+                  </button>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {versions.length === 0 ? (
+                    <p className="text-xs text-slate-500">אין גרסאות שיבוץ עדיין.</p>
+                  ) : (
+                    versions.slice(0, 4).map((version) => (
+                      <div key={version.id} className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-800">#{version.versionNumber}</span>
+                          <span className="inline-flex items-center gap-1 text-slate-500">
+                            <Users className="w-3.5 h-3.5" />
+                            {version.assignmentCount}
+                          </span>
                         </div>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${
-                            weekStatusStyle[status]
-                          }`}
-                        >
-                          {weekStatusLabel[status]}
-                        </span>
+                        {version.isPublished ? (
+                          <span className="mt-1 inline-flex items-center gap-1 text-teal-700 font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            פורסם
+                          </span>
+                        ) : null}
                       </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openCollectionDeadline(weekStart)}
-                          className="h-9 rounded-xl bg-[#1d5c8b] text-white text-xs font-bold hover:bg-[#164e78] inline-flex items-center justify-center gap-2"
-                        >
-                          <CalendarDays className="w-3.5 h-3.5" />
-                          דדליין איסוף
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => void handleLockWeek(weekStart)}
-                          disabled={lockingWeekStart === weekStart}
-                          className="h-9 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                        >
-                          {lockingWeekStart === weekStart ? (
-                            <LoadingSpinner className="w-3.5 h-3.5 text-[#1d5c8b]" />
-                          ) : (
-                            <Lock className="w-3.5 h-3.5 text-slate-500" />
-                          )}
-                          נעל
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => void handleSolveWeek(weekStart)}
-                          disabled={solvingWeekStart === weekStart}
-                          className="h-9 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-2 col-span-2"
-                        >
-                          {solvingWeekStart === weekStart ? (
-                            <LoadingSpinner className="w-3.5 h-3.5 text-teal-700" />
-                          ) : (
-                            <Sparkles className="w-3.5 h-3.5 text-teal-700" />
-                          )}
-                          שיבוץ חכם
-                        </button>
-                      </div>
-
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void fetchVersionsForWeek(weekStart)}
-                          disabled={loadingVersionsWeekStart === weekStart}
-                          className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
-                        >
-                          {loadingVersionsWeekStart === weekStart ? (
-                            <LoadingSpinner className="w-3.5 h-3.5 text-[#1d5c8b]" />
-                          ) : (
-                            <RefreshCcw className="w-3.5 h-3.5 text-slate-400" />
-                          )}
-                          גרסאות
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => void handlePublishLatest(weekStart)}
-                          disabled={!canPublish || publishingVersionId === latest?.id}
-                          className="h-9 px-3 rounded-xl bg-[#1d5c8b] text-white text-xs font-bold hover:bg-[#164e78] disabled:opacity-40 inline-flex items-center gap-2"
-                        >
-                          {publishingVersionId === latest?.id ? (
-                            <LoadingSpinner className="w-3.5 h-3.5" />
-                          ) : (
-                            <Send className="w-3.5 h-3.5" />
-                          )}
-                          פרסם אחרונה
-                        </button>
-                      </div>
-
-                      {latest ? (
-                        <div className="mt-2 text-[11px] text-slate-500">
-                          גרסה אחרונה:{" "}
-                          <span className="font-semibold text-slate-700">#{latest.versionNumber}</span>{" "}
-                          · שיבוצים: {latest.assignmentCount}{" "}
-                          {latest.isPublished ? (
-                            <span className="inline-flex items-center gap-1 text-teal-700 font-bold mr-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> פורסם
-                            </span>
-                          ) : null}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3">
+                <p className="text-sm font-extrabold text-slate-900">הרצות אחרונות</p>
+                <div className="mt-2 space-y-2">
+                  {runs.length === 0 ? (
+                    <p className="text-xs text-slate-500">אין הרצות solver לחודש זה.</p>
+                  ) : (
+                    runs.slice(0, 4).map((run) => (
+                      <div key={run.id} className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-800">{run.status}</span>
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })
-              )}
+                        {run.errorMessage ? (
+                          <p className="mt-1 text-rose-700">{run.errorMessage}</p>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </aside>
         </section>
 
-        <ShiftFormModal
-          isOpen={isShiftModalOpen}
-          mode={shiftModalMode}
-          weekStart={startOfWeekSundayIso(draftShiftDate)}
-          initialShiftDate={draftShiftDate}
-          shiftToEdit={shiftToEdit}
-          onClose={() => setIsShiftModalOpen(false)}
-          onSubmit={handleSubmitShift}
-        />
-
-        <CollectionDeadlineModal
-          isOpen={showCollectionDeadlineModal}
-          weekStart={collectionWeekStart}
-          currentDeadline={weeksByStart[collectionWeekStart]?.collectionDeadline ?? null}
-          onClose={() => {
-            setShowCollectionDeadlineModal(false);
-            setCollectionWeekStart("");
-          }}
-          onSubmit={async (deadlineIso) => {
-            if (!collectionWeekStart) return;
-            await axios.post(
-              `${API_BASE}/weeks/${collectionWeekStart}/open-collection`,
-              { collection_deadline: deadlineIso },
-              { headers: authHeaders },
-            );
-            await fetchWeeks();
-          }}
-        />
-
-        {/* Shift quick list (editable) */}
         <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70">
             <h2 className="font-extrabold text-slate-900">רשימת משמרות לחודש</h2>
-            <p className="text-xs text-slate-500 mt-0.5">עריכה/מחיקה מהירה לפי ימים.</p>
+            <p className="text-xs text-slate-500 mt-0.5">עריכה ומחיקה מהירה לפי ימים.</p>
           </div>
           {loadingMonthPlan ? (
             <LoadingState label="טוען משמרות..." className="p-8" />
@@ -768,21 +649,26 @@ export default function ShiftMonthPlanningPage() {
 
                   {day.shifts.length ? (
                     <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
-                      {day.shifts.map((s) => (
-                        <div key={String(s.id)} className="rounded-2xl border border-slate-200 bg-white p-3">
+                      {day.shifts.map((shift) => (
+                        <div key={String(shift.id)} className="rounded-2xl border border-slate-200 bg-white p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="font-bold text-slate-900" dir="ltr">
-                                {s.startTime} – {s.endTime}
+                              <p className="font-bold text-slate-900">
+                                {shift.label ?? shift.arrangementName ?? "משמרת"}
                               </p>
                               <p className="text-[11px] text-slate-500 mt-0.5" dir="ltr">
-                                weekStart: {s.weekStart}
+                                {shift.startTime} – {shift.endTime}
                               </p>
+                              {shift.requirements?.length ? (
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  {shift.requirements.map((requirement) => `${requirement.workerTypeName}: ${requirement.count}`).join(" · ")}
+                                </p>
+                              ) : null}
                             </div>
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => handleEditShift(s)}
+                                onClick={() => handleEditShift(shift)}
                                 className="h-9 w-9 rounded-xl border border-slate-200 hover:bg-slate-50"
                                 aria-label="ערוך משמרת"
                               >
@@ -790,7 +676,7 @@ export default function ShiftMonthPlanningPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleDeleteShift(s)}
+                                onClick={() => void handleDeleteShift(shift)}
                                 className="h-9 w-9 rounded-xl border border-rose-200 hover:bg-rose-50"
                                 aria-label="מחק משמרת"
                               >
@@ -810,7 +696,16 @@ export default function ShiftMonthPlanningPage() {
           )}
         </section>
       </div>
+
+      <MonthlyShiftFormModal
+        isOpen={isShiftModalOpen}
+        mode={shiftModalMode}
+        initialShiftDate={draftShiftDate || firstOfMonthIso(monthStart)}
+        shiftToEdit={shiftToEdit}
+        workerTypes={workerTypes}
+        onClose={() => setIsShiftModalOpen(false)}
+        onSubmit={handleSubmitShift}
+      />
     </div>
   );
 }
-

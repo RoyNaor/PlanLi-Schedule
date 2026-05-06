@@ -759,7 +759,7 @@ export const ScheduleService = {
   },
 
   validateAssignments(input: {
-    assignments: Array<{ shift_id: number; user_id: string }>;
+    assignments: Array<{ shift_id: number | string; user_id: string }>;
     shifts: Array<{ id: number }>;
     users: Array<{ id: string }>;
   }): AssignmentInput[] {
@@ -768,7 +768,14 @@ export const ScheduleService = {
     const seen = new Set<string>();
 
     return input.assignments.map((assignment) => {
-      if (!shiftIds.has(assignment.shift_id)) {
+      const shiftId = typeof assignment.shift_id === "number"
+        ? assignment.shift_id
+        : Number(assignment.shift_id);
+      if (!Number.isInteger(shiftId) || shiftId <= 0) {
+        throw new Error(`Solver returned invalid shift_id ${assignment.shift_id}`);
+      }
+
+      if (!shiftIds.has(shiftId)) {
         throw new Error(`Solver returned assignment for unknown shift_id ${assignment.shift_id}`);
       }
 
@@ -776,14 +783,14 @@ export const ScheduleService = {
         throw new Error(`Solver returned assignment for unknown user_id ${assignment.user_id}`);
       }
 
-      const dedupeKey = `${assignment.shift_id}:${assignment.user_id}`;
+      const dedupeKey = `${shiftId}:${assignment.user_id}`;
       if (seen.has(dedupeKey)) {
         throw new Error(`Solver returned duplicate assignment ${dedupeKey}`);
       }
       seen.add(dedupeKey);
 
       return {
-        shiftId: assignment.shift_id,
+        shiftId,
         userId: assignment.user_id,
       };
     });

@@ -6,7 +6,7 @@ import cors from "cors";
 import { closeDatabasePool, checkDatabaseConnection } from "./services/database.service.js";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 app.use(cors());
 app.use(router);
 

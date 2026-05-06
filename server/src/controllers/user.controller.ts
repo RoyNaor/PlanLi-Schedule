@@ -4,10 +4,12 @@ import { UserService } from "../services/user.service.js";
 import { FirebaseAdminService } from "../services/firebase-admin.service.js";
 import { DepartmentService } from "../services/department.service.js";
 import { SeniorityService } from "../services/seniority.service.js";
+import { WorkerTypeService } from "../services/worker-type.service.js";
 import { userRoleValues } from "../utils/staffing.utils.js";
 
 const departmentIdsSchema = z.array(z.string().uuid()).optional().default([]);
 const seniorityIdSchema = z.string().uuid().nullable().optional().default(null);
+const workerTypeIdSchema = z.string().uuid().nullable().optional().default(null);
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -17,6 +19,7 @@ const createUserSchema = z.object({
   phone: z.string().trim().min(1).nullable().optional(),
   department_ids: departmentIdsSchema,
   seniority_id: seniorityIdSchema,
+  worker_type_id: workerTypeIdSchema,
 });
 
 const updateUserSchema = z.object({
@@ -26,6 +29,7 @@ const updateUserSchema = z.object({
   phone: z.string().trim().min(1).nullable().optional(),
   department_ids: departmentIdsSchema,
   seniority_id: seniorityIdSchema,
+  worker_type_id: workerTypeIdSchema,
 });
 
 function normalizeDepartmentIds(departmentIds: string[]): string[] {
@@ -58,6 +62,17 @@ async function validateSeniority(role: string, seniorityId: string | null): Prom
   const existingCount = await SeniorityService.countExistingSeniorities([seniorityId]);
   if (existingCount !== 1) {
     return "Seniority does not exist";
+  }
+
+  return null;
+}
+
+async function validateWorkerType(workerTypeId: string | null): Promise<string | null> {
+  if (!workerTypeId) return null;
+
+  const existingCount = await WorkerTypeService.countExistingWorkerTypes([workerTypeId]);
+  if (existingCount !== 1) {
+    return "Worker type does not exist";
   }
 
   return null;
@@ -170,6 +185,11 @@ export const userController = {
       if (seniorityError) {
         return res.status(400).json({ error: seniorityError });
       }
+      const workerTypeId = parsed.role === "admin" ? null : parsed.worker_type_id;
+      const workerTypeError = await validateWorkerType(workerTypeId);
+      if (workerTypeError) {
+        return res.status(400).json({ error: workerTypeError });
+      }
 
       const firebaseUid = await FirebaseAdminService.createUser(
         parsed.email.trim(),
@@ -184,6 +204,7 @@ export const userController = {
         phone: parsed.phone ?? null,
         departmentIds,
         seniorityId,
+        workerTypeId,
       });
 
       return res.status(201).json(createdUser);
@@ -226,6 +247,11 @@ export const userController = {
       if (seniorityError) {
         return res.status(400).json({ error: seniorityError });
       }
+      const workerTypeId = parsed.role === "admin" ? null : parsed.worker_type_id;
+      const workerTypeError = await validateWorkerType(workerTypeId);
+      if (workerTypeError) {
+        return res.status(400).json({ error: workerTypeError });
+      }
 
       const updatedUser = await UserService.updateUser({
         id: userId,
@@ -235,6 +261,7 @@ export const userController = {
         phone: parsed.phone ?? null,
         departmentIds,
         seniorityId,
+        workerTypeId,
       });
 
       if (!updatedUser) {
