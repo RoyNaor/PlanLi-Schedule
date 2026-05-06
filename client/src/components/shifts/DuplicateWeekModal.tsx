@@ -54,6 +54,7 @@ export default function DuplicateWeekModal({
     const fallbackTargetWeek =
       defaultTargetWeek || (fallbackSourceWeek ? addDaysToIsoDate(fallbackSourceWeek, 7) : "");
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSourceWeekStart(fallbackSourceWeek);
     setTargetDate(fallbackTargetWeek || "");
   }, [defaultSourceWeek, defaultTargetWeek, isOpen, weeks]);

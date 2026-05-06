@@ -1,15 +1,20 @@
-import { Moon } from "lucide-react";
+import { Moon, Users } from "lucide-react";
 import { clsx } from "clsx";
-import { getRoleIcon, getRoleLabel } from "../../utils/staffing";
+import { useMemo } from "react";
+import { getRoleLabel, userRoleOptions } from "../../utils/staffing";
 import type { ScheduleAssignment } from "./types";
 
 function isOvernight(startTime: string, endTime: string) {
   return endTime !== "" && startTime !== "" && endTime <= startTime;
 }
 
+const ROLE_ICON_BY_ROLE = Object.fromEntries(
+  userRoleOptions.map((option) => [option.value, option.icon]),
+) as Record<string, typeof Users>;
+
 export function ScheduleShiftCard({ a }: { a: ScheduleAssignment }) {
   const overnight = isOvernight(a.startTime, a.endTime);
-  const Icon = getRoleIcon(a.userRole);
+  const Icon = useMemo(() => ROLE_ICON_BY_ROLE[a.userRole] ?? Users, [a.userRole]);
   return (
     <div
       className={clsx(

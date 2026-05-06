@@ -68,6 +68,7 @@ export default function ShiftFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValues(toFormValues(initialShiftDate, shiftToEdit));
   }, [isOpen, initialShiftDate, shiftToEdit]);
 

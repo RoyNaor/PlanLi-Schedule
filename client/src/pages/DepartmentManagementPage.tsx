@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
+import {
+  DepartmentStatsChips,
+  type DepartmentUserStatsData,
+} from "../components/departments/DepartmentStatsChips";
 
 interface DepartmentData {
   id: string;
@@ -20,14 +24,39 @@ interface DepartmentData {
   code: string;
   isActive: boolean;
   usersCount: number;
+  userStats: DepartmentUserStatsData;
+  requiredTotal?: number;
+  requiredSenior?: number;
+  requiredRegular?: number;
+  requiredIntern?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+function emptyDepartmentUserStats(totalUsers: number): DepartmentUserStatsData {
+  return {
+    total: totalUsers,
+    byStatus: {
+      active: totalUsers,
+      sick: 0,
+      course: 0,
+      vacation: 0,
+      leave: 0,
+      other: 0,
+    },
+    bySeniority: { senior: 0, regular: 0, intern: 0, none: 0 },
+    byRole: {},
+  };
 }
 
 interface DepartmentFormData {
   name: string;
   code: string;
   isActive: boolean;
+  requiredTotal: number;
+  requiredSenior: number;
+  requiredRegular: number;
+  requiredIntern: number;
 }
 
 const API_BASE = "http://localhost:3000/api";
@@ -36,6 +65,10 @@ const emptyForm: DepartmentFormData = {
   name: "",
   code: "",
   isActive: true,
+  requiredTotal: 0,
+  requiredSenior: 0,
+  requiredRegular: 0,
+  requiredIntern: 0,
 };
 
 function normalizeCode(value: string) {
@@ -70,6 +103,34 @@ function DepartmentStatusChip({ isActive }: { isActive: boolean }) {
   );
 }
 
+function RequirementsSummary({ department }: { department: DepartmentData }) {
+  const requiredTotal = department.requiredTotal ?? 0;
+  const requiredSenior = department.requiredSenior ?? 0;
+  const requiredRegular = department.requiredRegular ?? 0;
+  const requiredIntern = department.requiredIntern ?? 0;
+
+  if (requiredTotal === 0 && requiredSenior === 0 && requiredRegular === 0 && requiredIntern === 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+        סה״כ: {requiredTotal}
+      </span>
+      <span className="inline-flex items-center rounded-full bg-[#ebf4fb] px-2 py-0.5 text-xs font-semibold text-[#1d5c8b]">
+        בכירים: {requiredSenior}
+      </span>
+      <span className="inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
+        רגילים: {requiredRegular}
+      </span>
+      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        מתמחים: {requiredIntern}
+      </span>
+    </div>
+  );
+}
+
 export default function DepartmentManagementPage() {
   const session = useMemo(() => AuthService.getSession(), []);
   const [departments, setDepartments] = useState<DepartmentData[]>([]);
@@ -97,7 +158,15 @@ export default function DepartmentManagementPage() {
         `${API_BASE}/departments`,
         { headers: authHeaders },
       );
-      setDepartments(res.data.departments ?? []);
+      const raw = res.data.departments ?? [];
+      setDepartments(
+        raw.map((d) => ({
+          ...d,
+          userStats:
+            d.userStats ??
+            emptyDepartmentUserStats(typeof d.usersCount === "number" ? d.usersCount : 0),
+        })),
+      );
     } catch (requestError: unknown) {
       console.error("Error fetching departments:", requestError);
       setError(getApiErrorMessage(requestError, "שגיאה בטעינת המחלקות"));
@@ -150,6 +219,10 @@ export default function DepartmentManagementPage() {
       name: department.name,
       code: department.code,
       isActive: department.isActive,
+      requiredTotal: department.requiredTotal ?? 0,
+      requiredSenior: department.requiredSenior ?? 0,
+      requiredRegular: department.requiredRegular ?? 0,
+      requiredIntern: department.requiredIntern ?? 0,
     });
     setFormOpen(true);
   };
@@ -168,6 +241,10 @@ export default function DepartmentManagementPage() {
       name: formData.name.trim(),
       code: normalizeCode(formData.code),
       is_active: formData.isActive,
+      required_total: Math.max(0, Number(formData.requiredTotal) || 0),
+      required_senior: Math.max(0, Number(formData.requiredSenior) || 0),
+      required_regular: Math.max(0, Number(formData.requiredRegular) || 0),
+      required_intern: Math.max(0, Number(formData.requiredIntern) || 0),
     };
 
     try {
@@ -320,6 +397,71 @@ export default function DepartmentManagementPage() {
                 <span className="text-sm font-medium text-slate-700">מחלקה פעילה</span>
               </label>
 
+              <div className="md:col-span-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <p className="text-sm font-semibold text-slate-900">דרישות כוח אדם</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  אפשר לשמור גם אם אין התאמה מלאה — תקבלו אזהרה בחדר הבקרה.
+                </p>
+
+                {formData.requiredSenior + formData.requiredRegular + formData.requiredIntern !==
+                formData.requiredTotal ? (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    שים לב: סכום בכירים/רגילים/מתמחים אינו שווה לסה״כ.
+                  </div>
+                ) : null}
+
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">סה״כ</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.requiredTotal}
+                      onChange={(e) =>
+                        setFormData((cur) => ({ ...cur, requiredTotal: Number(e.target.value) }))
+                      }
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">בכירים</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.requiredSenior}
+                      onChange={(e) =>
+                        setFormData((cur) => ({ ...cur, requiredSenior: Number(e.target.value) }))
+                      }
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">רגילים</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.requiredRegular}
+                      onChange={(e) =>
+                        setFormData((cur) => ({ ...cur, requiredRegular: Number(e.target.value) }))
+                      }
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold text-slate-600">מתמחים</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.requiredIntern}
+                      onChange={(e) =>
+                        setFormData((cur) => ({ ...cur, requiredIntern: Number(e.target.value) }))
+                      }
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-[#1d5c8b]"
+                    />
+                  </label>
+                </div>
+              </div>
+
               <div className="md:col-span-3 flex justify-end gap-3">
                 <button
                   type="button"
@@ -376,6 +518,7 @@ export default function DepartmentManagementPage() {
                   <th className="px-6 py-4 font-semibold">מחלקה</th>
                   <th className="px-6 py-4 font-semibold">קוד</th>
                   <th className="px-6 py-4 font-semibold">משתמשים</th>
+                  <th className="px-6 py-4 font-semibold">דרישות</th>
                   <th className="px-6 py-4 font-semibold">סטטוס</th>
                   <th className="px-6 py-4 font-semibold">פעולות</th>
                 </tr>
@@ -383,25 +526,28 @@ export default function DepartmentManagementPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
                       <LoadingState label="טוען מחלקות..." className="p-0" />
                     </td>
                   </tr>
                 ) : filteredDepartments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
                       אין מחלקות להצגה
                     </td>
                   </tr>
                 ) : (
                   filteredDepartments.map((department) => (
                     <tr key={department.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <span className="w-9 h-9 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center">
-                            <Building2 className="w-4 h-4" />
-                          </span>
-                          <span className="font-semibold text-slate-900">{department.name}</span>
+                      <td className="px-6 py-4 align-top">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-[#ebf4fb] text-[#1d5c8b] flex items-center justify-center shrink-0">
+                              <Building2 className="w-4 h-4" />
+                            </span>
+                            <span className="font-semibold text-slate-900">{department.name}</span>
+                          </div>
+                          <DepartmentStatsChips stats={department.userStats} />
                         </div>
                       </td>
                       <td className="px-6 py-4 text-left font-mono text-slate-500" dir="ltr">
@@ -412,6 +558,9 @@ export default function DepartmentManagementPage() {
                           <Users className="w-4 h-4 text-slate-400" />
                           {department.usersCount}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <RequirementsSummary department={department} />
                       </td>
                       <td className="px-6 py-4">
                         <DepartmentStatusChip isActive={department.isActive} />
@@ -460,6 +609,7 @@ export default function DepartmentManagementPage() {
                         <p className="text-xs text-slate-500 font-mono" dir="ltr">
                           {department.code}
                         </p>
+                        <DepartmentStatsChips stats={department.userStats} />
                       </div>
                     </div>
                     <DepartmentStatusChip isActive={department.isActive} />
@@ -469,6 +619,9 @@ export default function DepartmentManagementPage() {
                       <Users className="w-4 h-4 text-slate-400" />
                       {department.usersCount}
                     </span>
+                    <div className="text-xs text-slate-500">
+                      <RequirementsSummary department={department} />
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"

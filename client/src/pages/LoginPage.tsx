@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import axios from "axios";
 import { Lock, Mail } from "lucide-react";
 import { auth } from "../firebase";
 import { AuthService } from "../services/auth.service";
@@ -39,10 +40,18 @@ export default function LoginPage() {
       await AuthService.validateUserFromToken(token);
 
       navigate("/chat", { replace: true });
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.error ??
-        "ההתחברות נכשלה. נא לבדוק את פרטי ההתחברות.";
+    } catch (err: unknown) {
+      const message = (() => {
+        if (!axios.isAxiosError(err)) {
+          return "ההתחברות נכשלה. נא לבדוק את פרטי ההתחברות.";
+        }
+        const data = err.response?.data;
+        if (data && typeof data === "object" && "error" in data) {
+          const record = data as Record<string, unknown>;
+          if (typeof record.error === "string") return record.error;
+        }
+        return err.message;
+      })();
       setError(message);
       console.error(err);
     } finally {
