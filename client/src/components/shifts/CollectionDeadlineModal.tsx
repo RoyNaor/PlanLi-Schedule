@@ -54,6 +54,7 @@ export default function CollectionDeadlineModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDeadlineInput(normalizeDeadlineForInput(currentDeadline));
     setSaving(false);
   }, [currentDeadline, isOpen]);

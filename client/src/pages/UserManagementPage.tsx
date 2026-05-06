@@ -15,6 +15,7 @@ import {
 import { AuthService } from "../services/auth.service";
 import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
 import { getRoleLabel, userRoleOptions } from "../utils/staffing";
+import { getSeniorityLabel } from "../utils/userStatus";
 
 interface UserData {
   id: string;
@@ -87,16 +88,6 @@ const defaultAddForm: AddFormData = {
 
 function isStaffRole(role: string) {
   return role !== "admin";
-}
-
-function getSeniorityLabel(seniority: SeniorityData | null) {
-  if (!seniority) return "—";
-  const labels: Record<string, string> = {
-    intern: "מתמחה",
-    regular: "רגיל",
-    senior: "בכיר",
-  };
-  return labels[seniority.code] ?? seniority.name;
 }
 
 function getApiErrorMessage(error: unknown, fallback: string) {

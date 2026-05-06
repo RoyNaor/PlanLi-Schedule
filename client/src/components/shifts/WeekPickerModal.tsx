@@ -34,11 +34,12 @@ type Props = {
 
 export default function WeekPickerModal({
   isOpen,
-  weeks: _weeks,
+  weeks,
   selectedWeek,
   onClose,
   onSelectWeekStart,
 }: Props) {
+  void weeks;
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

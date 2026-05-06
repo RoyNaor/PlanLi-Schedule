@@ -12,10 +12,13 @@ import { AuthService } from "../services/auth.service";
 import { LoadingState } from "../components/ui/LoadingIndicator";
 import { getRoleIcon, getRoleLabel } from "../utils/staffing";
 import {
-  addDaysToIsoDate,
+  addMonthsToIsoDate,
+  firstOfMonthIso,
   getJerusalemTodayIsoDate,
+  getWeekStartsOverlappingRange,
+  lastOfMonthIso,
+  normalizeApiDateToIso,
   parseIsoDateToUtc,
-  startOfWeekSundayIso,
 } from "../utils/date.utils";
 
 const API_BASE = "http://localhost:3000/api";
@@ -43,8 +46,7 @@ interface ConstraintsSummaryResponse {
   summary: StaffConstraintSummary[];
 }
 
-const dateFormatter = new Intl.DateTimeFormat("he-IL", {
-  day: "numeric",
+const monthFormatter = new Intl.DateTimeFormat("he-IL", {
   month: "long",
   year: "numeric",
   timeZone: ISRAEL_TIMEZONE,
@@ -66,8 +68,8 @@ const constraintTimeFormatter = new Intl.DateTimeFormat("he-IL", {
 export default function ScheduleReviewPage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
-  const [weekStart, setWeekStart] = useState(() =>
-    startOfWeekSundayIso(getJerusalemTodayIsoDate()),
+  const [monthIso, setMonthIso] = useState(() =>
+    firstOfMonthIso(getJerusalemTodayIsoDate()),
   );
   const [summary, setSummary] = useState<StaffConstraintSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,57 +80,122 @@ export default function ScheduleReviewPage() {
     [token],
   );
 
-  const weekLabel = useMemo(() => {
-    const end = addDaysToIsoDate(weekStart, 6);
-    const startDate = parseIsoDateToUtc(weekStart);
-    const endDate = parseIsoDateToUtc(end);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return weekStart;
-    return `${dateFormatter.format(startDate)} - ${dateFormatter.format(endDate)}`;
-  }, [weekStart]);
+  const monthLabel = useMemo(() => {
+    const d = parseIsoDateToUtc(monthIso);
+    if (Number.isNaN(d.getTime())) return monthIso;
+    return monthFormatter.format(d);
+  }, [monthIso]);
 
-  const navigateWeek = useCallback((offset: number) => {
-    setWeekStart((prev) => addDaysToIsoDate(prev, offset));
+  const monthValue = useMemo(() => monthIso.slice(0, 7), [monthIso]);
+
+  const navigateMonth = useCallback((delta: number) => {
+    setMonthIso((prev) => {
+      const next = addMonthsToIsoDate(prev, delta);
+      return firstOfMonthIso(next);
+    });
   }, []);
 
-  const fetchSummary = useCallback(async () => {
-    if (!token || !weekStart) return;
+  const fetchMonthSummary = useCallback(async () => {
+    if (!token || !monthIso) return;
+    const firstM = firstOfMonthIso(monthIso);
+    const lastM = lastOfMonthIso(monthIso);
+    if (!firstM || !lastM) return;
+    const weekStarts = getWeekStartsOverlappingRange(firstM, lastM);
+    if (weekStarts.length === 0) {
+      setSummary([]);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      const response = await axios.get<ConstraintsSummaryResponse>(
-        `${API_BASE}/weeks/${weekStart}/constraints-summary`,
-        { headers: authHeaders },
+      const responses = await Promise.all(
+        weekStarts.map((weekStart) =>
+          axios.get<ConstraintsSummaryResponse>(`${API_BASE}/weeks/${weekStart}/constraints-summary`, {
+            headers: authHeaders,
+          }),
+        ),
       );
-      setSummary(response.data.summary);
-    } catch (e: any) {
-      setError(e?.response?.data?.error ?? "שגיאה בטעינת מגבלות");
+
+      const userMap = new Map<
+        string,
+        {
+          base: Omit<StaffConstraintSummary, "constraints">;
+          constraintsById: Map<string, ConstraintEntry>;
+        }
+      >();
+
+      for (const r of responses) {
+        for (const staff of r.data.summary) {
+          const existing = userMap.get(staff.userId);
+          const constraintsById = existing?.constraintsById ?? new Map<string, ConstraintEntry>();
+
+          for (const c of staff.constraints ?? []) {
+            const startIso = normalizeApiDateToIso(c.startTime);
+            const endIso = normalizeApiDateToIso(c.endTime);
+            if (!startIso || !endIso) continue;
+            const intersectsMonth = startIso <= lastM && endIso >= firstM;
+            if (!intersectsMonth) continue;
+            constraintsById.set(c.id, c);
+          }
+
+          if (constraintsById.size === 0 && !existing) continue;
+
+          userMap.set(staff.userId, {
+            base: {
+              userId: staff.userId,
+              fullName: staff.fullName,
+              role: staff.role,
+              email: staff.email,
+            },
+            constraintsById,
+          });
+        }
+      }
+
+      const merged: StaffConstraintSummary[] = Array.from(userMap.values())
+        .map((u) => ({
+          ...u.base,
+          constraints: Array.from(u.constraintsById.values()).sort((a, b) =>
+            a.startTime.localeCompare(b.startTime),
+          ),
+        }))
+        .filter((u) => u.constraints.length > 0)
+        .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+      setSummary(merged);
+    } catch (e: unknown) {
+      const msg = axios.isAxiosError(e) ? (e.response?.data?.error ?? e.message) : "שגיאה בטעינת מגבלות";
+      setError(msg);
       setSummary([]);
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, token, weekStart]);
+  }, [authHeaders, monthIso, token]);
 
   useEffect(() => {
-    void fetchSummary();
-  }, [fetchSummary]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchMonthSummary();
+  }, [fetchMonthSummary]);
 
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/schedule" replace />;
 
-  const totalWithConstraints = summary.filter((s) => s.constraints.length > 0).length;
+  const summaryWithConstraints = summary.filter((s) => (s.constraints ?? []).length > 0);
+  const totalWithConstraints = summaryWithConstraints.length;
 
   return (
     <div dir="rtl" className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
       <div className="max-w-6xl mx-auto space-y-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">מגבלות עובדים</h1>
-          <p className="text-sm text-slate-500 mt-0.5">סקירת מגבלות הצוות לשבוע נבחר.</p>
+          <p className="text-sm text-slate-500 mt-0.5">סקירת מגבלות הצוות לחודש נבחר.</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => navigateWeek(7)}
+            onClick={() => navigateMonth(1)}
             className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
           >
             <ChevronRight className="w-4 h-4 text-slate-600" />
@@ -136,10 +203,21 @@ export default function ScheduleReviewPage() {
 
           <div className="flex items-center gap-3 text-sm">
             <Calendar className="w-4 h-4 text-[#1d5c8b]" />
-            <span className="font-semibold text-slate-900">{weekLabel}</span>
+            <span className="font-semibold text-slate-900">{monthLabel}</span>
+            <input
+              type="month"
+              value={monthValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                setMonthIso(`${v}-01`);
+              }}
+              className="h-9 rounded-lg border border-slate-200 px-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1d5c8b]/20"
+              aria-label="בחר חודש"
+            />
             <button
               type="button"
-              onClick={() => setWeekStart(startOfWeekSundayIso(getJerusalemTodayIsoDate()))}
+              onClick={() => setMonthIso(firstOfMonthIso(getJerusalemTodayIsoDate()))}
               className="text-xs text-[#1d5c8b] font-medium hover:underline"
             >
               היום
@@ -148,7 +226,7 @@ export default function ScheduleReviewPage() {
 
           <button
             type="button"
-            onClick={() => navigateWeek(-7)}
+            onClick={() => navigateMonth(-1)}
             className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
           >
             <ChevronLeft className="w-4 h-4 text-slate-600" />
@@ -162,7 +240,7 @@ export default function ScheduleReviewPage() {
         ) : null}
 
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">מגבלות עובדים לשבוע זה</h2>
+          <h2 className="text-sm font-semibold text-slate-700">מגבלות עובדים לחודש זה</h2>
           <span className="text-xs text-slate-400">
             {totalWithConstraints} עובדים עם מגבלות
           </span>
@@ -172,13 +250,13 @@ export default function ScheduleReviewPage() {
           <div className="rounded-2xl border border-slate-200 bg-white">
             <LoadingState label="טוען מגבלות..." className="p-6" />
           </div>
-        ) : summary.length === 0 ? (
+        ) : summaryWithConstraints.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
-            <p className="text-sm text-slate-500">אין עובדים במערכת.</p>
+            <p className="text-sm text-slate-500">אין עובדים עם מגבלות לחודש זה.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {summary.map((staff) => {
+            {summaryWithConstraints.map((staff) => {
               const Icon = getRoleIcon(staff.role);
               return (
                 <div
@@ -201,69 +279,59 @@ export default function ScheduleReviewPage() {
                       </span>
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          staff.constraints.length === 0
-                            ? "bg-[#ebf4fb] text-[#1d5c8b]"
-                            : "bg-slate-100 text-slate-600"
+                          "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        {staff.constraints.length === 0
-                          ? "ללא מגבלות"
-                          : `${staff.constraints.length} מגבלות`}
+                        {`${staff.constraints.length} מגבלות`}
                       </span>
                     </div>
                   </div>
 
-                  {staff.constraints.length === 0 ? (
-                    <div className="px-4 py-3 text-xs text-slate-400 text-center">
-                      לא הוגשו מגבלות לשבוע זה
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-50">
-                      {staff.constraints.map((c) => {
-                        const start = new Date(c.startTime);
-                        const end = new Date(c.endTime);
-                        return (
-                          <div key={c.id} className="px-4 py-2.5 flex items-start gap-3">
-                            <div className="mt-0.5">
-                              {c.priority === "HARD" ? (
-                                <ShieldAlert className="w-4 h-4 text-red-500" />
-                              ) : (
-                                <Shield className="w-4 h-4 text-amber-400" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span
-                                  className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${
-                                    c.priority === "HARD"
-                                      ? "bg-red-100 text-red-700"
-                                      : "bg-amber-100 text-amber-700"
-                                  }`}
-                                >
-                                  {c.priority === "HARD" ? "חובה" : "העדפה"}
-                                </span>
-                                <span className="text-xs text-slate-600 font-medium">
-                                  {constraintDateFormatter.format(start)}
-                                </span>
-                                {c.isFullDay ? (
-                                  <span className="text-[11px] text-slate-500">כל היום</span>
-                                ) : (
-                                  <span className="text-[11px] text-slate-500 font-mono">
-                                    {constraintTimeFormatter.format(start)}–{constraintTimeFormatter.format(end)}
-                                  </span>
-                                )}
-                              </div>
-                              {c.reason && (
-                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                                  {c.reason}
-                                </p>
-                              )}
-                            </div>
+                  <div className="divide-y divide-slate-50">
+                    {staff.constraints.map((c) => {
+                      const start = new Date(c.startTime);
+                      const end = new Date(c.endTime);
+                      return (
+                        <div key={c.id} className="px-4 py-2.5 flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {c.priority === "HARD" ? (
+                              <ShieldAlert className="w-4 h-4 text-red-500" />
+                            ) : (
+                              <Shield className="w-4 h-4 text-amber-400" />
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${
+                                  c.priority === "HARD"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {c.priority === "HARD" ? "חובה" : "העדפה"}
+                              </span>
+                              <span className="text-xs text-slate-600 font-medium">
+                                {constraintDateFormatter.format(start)}
+                              </span>
+                              {c.isFullDay ? (
+                                <span className="text-[11px] text-slate-500">כל היום</span>
+                              ) : (
+                                <span className="text-[11px] text-slate-500 font-mono">
+                                  {constraintTimeFormatter.format(start)}–{constraintTimeFormatter.format(end)}
+                                </span>
+                              )}
+                            </div>
+                            {c.reason && (
+                              <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                {c.reason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}

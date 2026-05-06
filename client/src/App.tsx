@@ -13,10 +13,12 @@ import LoginPage from "./pages/LoginPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import DepartmentManagementPage from "./pages/DepartmentManagementPage";
 import ShiftPage from "./pages/ShiftPage";
+import ShiftMonthPlanningPage from "./pages/ShiftMonthPlanningPage";
 import MySchedulePage from "./pages/MySchedulePage";
 import ScheduleReviewPage from "./pages/ScheduleReviewPage";
 import { AuthService } from "./services/auth.service";
 import Sidebar from "./components/Sidebar";
+import { useStoredNumber } from "./hooks/useStoredNumber";
 
 function App() {
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("planli:sidebarCollapsed") === "1",
   );
+  const sidebarWidth = useStoredNumber("planli:sidebarWidth", 260, { min: 220, max: 380 });
   const isLoginRoute = location.pathname === "/login";
 
   useEffect(() => {
@@ -74,11 +77,17 @@ function App() {
 
   const handleNavigate = (path: string) => navigate(path);
 
+  const layoutStyle: (React.CSSProperties & Record<"--sidebar-w", string>) | undefined =
+    !isLoginRoute && !sidebarCollapsed
+      ? { "--sidebar-w": `${sidebarWidth.value}px` }
+      : undefined;
+
   return (
     <div
       className={`app-layout${isLoginRoute ? " is-login" : ""}${
         !isLoginRoute && sidebarCollapsed ? " is-collapsed" : ""
       }`}
+      style={layoutStyle}
     >
       {!isLoginRoute && !sidebarOpen && (
         <button
@@ -102,6 +111,8 @@ function App() {
           onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
           onNavigate={handleNavigate}
           onAuthAction={handleAuthAction}
+          sidebarWidthPx={sidebarWidth.value}
+          onResize={(next) => sidebarWidth.set(next)}
         />
       ) : null}
 
@@ -127,6 +138,10 @@ function App() {
           <Route
             path="/shifts"
             element={session ? <ShiftPage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/shifts/department/:departmentId/month"
+            element={session ? <ShiftMonthPlanningPage /> : <Navigate to="/login" replace />}
           />
           <Route
             path="/schedule"
