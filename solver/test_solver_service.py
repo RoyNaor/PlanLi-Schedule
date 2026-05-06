@@ -166,7 +166,7 @@ class SolverServiceTests(unittest.TestCase):
 
         body = response.get_json()
         self.assertEqual(body["status"], "feasible")
-        self.assertEqual(body["solver_meta"]["monthly_solver_version"], 2)
+        self.assertEqual(body["solver_meta"]["monthly_solver_version"], 3)
         self.assertEqual(len(body["assignments"]), 4)
         self.assertEqual(
             {(a["shift_id"], a["department_id"]) for a in body["assignments"]},
@@ -284,6 +284,121 @@ class SolverServiceTests(unittest.TestCase):
 
         self.assertEqual(counts, {"midwife_1": 2, "midwife_2": 2})
         self.assertEqual(body["solver_meta"]["fairness_imbalance"], 0)
+
+    def test_monthly_soft_worker_state_uses_seniority_weighting(self):
+        payload = {
+            "month": "2026-05",
+            "workers": [
+                {"id": "senior_midwife", "worker_type": "midwife", "seniority": 9},
+                {"id": "junior_midwife", "worker_type": "midwife", "seniority": 1},
+            ],
+            "shifts": [
+                {
+                    "id": "delivery_day",
+                    "department_id": "delivery",
+                    "arrangement_id": "regular",
+                    "shift_date": "2026-05-10",
+                    "start_time": "08:00",
+                    "end_time": "16:00",
+                    "requirements": [{"worker_type": "midwife", "count": 1}],
+                }
+            ],
+            "worker_states": [
+                {
+                    "worker_id": "senior_midwife",
+                    "state": "מבקשת חופש",
+                    "date": "2026-05-10",
+                },
+                {
+                    "worker_id": "junior_midwife",
+                    "state": "מבקשת חופש",
+                    "date": "2026-05-10",
+                },
+            ],
+        }
+
+        response = self.client.post("/solve-month", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["status"], "feasible")
+        self.assertEqual(body["assignments"][0]["worker_id"], "junior_midwife")
+        self.assertEqual(body["solver_meta"]["soft_state_violations"], 1)
+        self.assertEqual(body["solver_meta"]["seniority_penalty"], 1)
+
+    def test_monthly_approved_vacation_state_blocks_assignment(self):
+        payload = {
+            "month": "2026-05",
+            "workers": [
+                {"id": "blocked_resident", "worker_type": "resident", "seniority": 2},
+                {"id": "available_resident", "worker_type": "resident", "seniority": 1},
+            ],
+            "shifts": [
+                {
+                    "id": "gyn_day",
+                    "department_id": "gyn",
+                    "arrangement_id": "regular",
+                    "shift_date": "2026-05-11",
+                    "start_time": "08:00",
+                    "end_time": "16:00",
+                    "requirements": [{"worker_type": "resident", "count": 1}],
+                }
+            ],
+            "worker_states": [
+                {
+                    "worker_id": "blocked_resident",
+                    "state": "חופש מאושר",
+                    "date": "2026-05-11",
+                }
+            ],
+        }
+
+        response = self.client.post("/solve-month", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["status"], "feasible")
+        self.assertEqual(body["assignments"][0]["worker_id"], "available_resident")
+        self.assertEqual(body["solver_meta"]["hard_state_blocks"], 1)
+
+    def test_monthly_arrangement_eligibility_is_enforced(self):
+        payload = {
+            "month": "2026-05",
+            "workers": [
+                {
+                    "id": "night_resident",
+                    "worker_type": "resident",
+                    "seniority": 2,
+                    "department_ids": ["delivery"],
+                    "arrangement_ids": ["night"],
+                },
+                {
+                    "id": "day_resident",
+                    "worker_type": "resident",
+                    "seniority": 1,
+                    "department_ids": ["delivery"],
+                    "arrangement_ids": ["day"],
+                },
+            ],
+            "shifts": [
+                {
+                    "id": "delivery_night",
+                    "department_id": "delivery",
+                    "arrangement_id": "night",
+                    "shift_date": "2026-05-12",
+                    "start_time": "23:00",
+                    "end_time": "08:00",
+                    "requirements": [{"worker_type": "resident", "count": 1}],
+                }
+            ],
+        }
+
+        response = self.client.post("/solve-month", json=payload)
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        self.assertEqual(body["status"], "feasible")
+        self.assertEqual(body["assignments"][0]["worker_id"], "night_resident")
 
 
 if __name__ == "__main__":

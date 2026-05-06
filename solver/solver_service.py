@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -24,32 +24,164 @@ STAFFING_FIELDS: dict[str, str] = {
 
 STAFF_ROLES = set(STAFFING_FIELDS.keys())
 
-BLOCKING_WORKER_STATES = {
+HARD_WORKER_STATE_PHRASES = {
+    "after_shift",
+    "approved_leave",
+    "approved_vacation",
+    "conference",
     "course",
-    "training",
-    "vacation",
     "holiday",
     "leave",
+    "military",
+    "post_call",
+    "reserve",
+    "reserves",
     "sick",
     "sick_leave",
-    "בקורס",
+    "training",
+    "vacation",
+    "אחרי תורנות",
     "בחופש",
+    "בקורס",
+    "חופש",
+    "חופש מאושר",
+    "חופשה מאושרת",
     "מחלה",
+    "מילואים",
+    "קופח",
+    "קופת חולים",
+    "קורס",
+    "כנס",
 }
 
-NON_BLOCKING_WORKER_STATES = {
-    "working",
+SOFT_WORKER_STATE_PHRASES = {
+    "if_possible",
+    "leave_request",
+    "preference",
+    "prefer",
+    "request",
+    "requested_leave",
+    "requested_vacation",
+    "soft",
+    "vacation_request",
+    "אשמח",
+    "אם אפשר",
+    "בקשה",
+    "חליפי",
+    "חופש מבוקש",
+    "מבקש",
+    "מבקשת",
+    "מעדיף",
+    "מעדיפה",
+}
+
+NON_BLOCKING_STATE_PHRASES = {
     "active",
     "available",
+    "working",
+    "זמין",
+    "זמינה",
     "עובד",
     "עובדת",
 }
 
+SOFT_PREFERENCE_BASE_WEIGHT = 1000
+SENIORITY_WEIGHT_MULTIPLIER = 100
 
 def as_int(value: Any, default: int = 0) -> int:
     if value is None:
         return default
     return int(value)
+
+
+def normalize_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def normalize_priority(value: Any) -> str | None:
+    raw = normalize_text(value)
+    if not raw:
+        return None
+    if raw in {"hard", "קשיח", "חובה", "blocked"}:
+        return "HARD"
+    if raw in {"soft", "רך", "בקשה", "preference", "request"}:
+        return "SOFT"
+    upper = raw.upper()
+    if upper in {"HARD", "SOFT"}:
+        return upper
+    return None
+
+
+def normalize_id_set(raw_values: Any, field_name: str) -> set[str] | None:
+    if raw_values is None:
+        return None
+    if not isinstance(raw_values, list):
+        raise ValueError(f"{field_name} must be an array")
+
+    normalized: set[str] = set()
+    for raw_value in raw_values:
+        if isinstance(raw_value, dict):
+            raw_id = (
+                raw_value.get("id")
+                or raw_value.get("department_id")
+                or raw_value.get("arrangement_id")
+                or raw_value.get("name")
+            )
+        else:
+            raw_id = raw_value
+        if raw_id is not None and str(raw_id):
+            normalized.add(str(raw_id))
+
+    return normalized
+
+
+def state_text(state: dict[str, Any]) -> str:
+    parts = [
+        state.get("state"),
+        state.get("status"),
+        state.get("kind"),
+        state.get("type"),
+        state.get("category"),
+        state.get("reason"),
+        state.get("note"),
+        state.get("text"),
+        state.get("label"),
+    ]
+    return " ".join(normalize_text(part) for part in parts if part is not None)
+
+
+def worker_state_effect(state: dict[str, Any]) -> str:
+    explicit_priority = normalize_priority(state.get("priority") or state.get("constraint_priority"))
+    if explicit_priority == "HARD":
+        return "hard"
+    if explicit_priority == "SOFT":
+        return "soft"
+
+    if "blocks_assignment" in state:
+        return "hard" if bool(state["blocks_assignment"]) else "ignore"
+    if bool(state.get("is_request") or state.get("soft") or state.get("is_soft")):
+        return "soft"
+
+    text = state_text(state)
+    if not text:
+        return "ignore"
+    if any(phrase in text for phrase in SOFT_WORKER_STATE_PHRASES):
+        return "soft"
+    if any(phrase in text for phrase in NON_BLOCKING_STATE_PHRASES):
+        return "ignore"
+    if any(phrase in text for phrase in HARD_WORKER_STATE_PHRASES):
+        return "hard"
+    return "ignore"
+
+
+def preference_weight(record: dict[str, Any], seniority: int) -> int:
+    base_weight = as_int(
+        record.get("weight")
+        or record.get("penalty")
+        or record.get("priority_weight"),
+        SOFT_PREFERENCE_BASE_WEIGHT,
+    )
+    return base_weight + seniority * SENIORITY_WEIGHT_MULTIPLIER
 
 
 def is_monthly_payload(payload: dict[str, Any]) -> bool:
@@ -77,11 +209,30 @@ def normalize_worker_departments(worker: dict[str, Any]) -> set[str] | None:
         or worker.get("eligible_department_ids")
         or worker.get("departments")
     )
-    if raw_departments is None:
+    return normalize_id_set(raw_departments, "worker department eligibility")
+
+
+def normalize_worker_arrangements(worker: dict[str, Any]) -> set[str] | None:
+    raw_arrangements = (
+        worker.get("arrangement_ids")
+        or worker.get("eligible_arrangement_ids")
+        or worker.get("arrangements")
+    )
+    return normalize_id_set(raw_arrangements, "worker arrangement eligibility")
+
+
+def normalize_worker_department_arrangements(worker: dict[str, Any]) -> dict[str, set[str]] | None:
+    raw_map = worker.get("department_arrangements") or worker.get("eligible_department_arrangements")
+    if raw_map is None:
         return None
-    if not isinstance(raw_departments, list):
-        raise ValueError("worker department eligibility must be an array")
-    return {str(department_id) for department_id in raw_departments}
+    if not isinstance(raw_map, dict):
+        raise ValueError("worker department_arrangements must be an object")
+
+    normalized: dict[str, set[str]] = {}
+    for department_id, arrangement_ids in raw_map.items():
+        normalized_set = normalize_id_set(arrangement_ids, "department arrangement eligibility")
+        normalized[str(department_id)] = normalized_set or set()
+    return normalized
 
 
 def normalize_shift_requirements(shift: dict[str, Any]) -> dict[str, int]:
@@ -121,13 +272,7 @@ def normalize_shift_requirements(shift: dict[str, Any]) -> dict[str, int]:
 
 
 def state_blocks_assignment(state: dict[str, Any]) -> bool:
-    if "blocks_assignment" in state:
-        return bool(state["blocks_assignment"])
-
-    state_name = str(state.get("state") or state.get("status") or "").strip().lower()
-    if state_name in NON_BLOCKING_WORKER_STATES:
-        return False
-    return state_name in BLOCKING_WORKER_STATES
+    return worker_state_effect(state) == "hard"
 
 
 def collect_worker_states(payload: dict[str, Any], workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -168,6 +313,28 @@ def parse_iso_datetime(value: str) -> datetime:
     return dt
 
 
+def is_date_only(value: Any) -> bool:
+    return isinstance(value, str) and len(value.strip()) == 10 and value.count("-") == 2
+
+
+def parse_timed_record_window(record: dict[str, Any], record_name: str) -> tuple[datetime, datetime]:
+    start_raw = record.get("start_time") or record.get("start_at") or record.get("start_date")
+    end_raw = record.get("end_time") or record.get("end_at") or record.get("end_date")
+
+    if start_raw is None and end_raw is None and record.get("date") is not None:
+        start_dt = parse_iso_datetime(str(record["date"]))
+        return start_dt, start_dt + timedelta(days=1)
+
+    if start_raw is None or end_raw is None:
+        raise ValueError(f"{record_name} is missing start_time/end_time or date")
+
+    start_dt = parse_iso_datetime(str(start_raw))
+    end_dt = parse_iso_datetime(str(end_raw))
+    if is_date_only(end_raw):
+        end_dt += timedelta(days=1)
+    return start_dt, end_dt
+
+
 def parse_shift_datetime(date_str: str, time_str: str) -> datetime:
     raw = f"{date_str}T{time_str}"
     fmt = "%Y-%m-%dT%H:%M:%S" if len(time_str) == 8 else "%Y-%m-%dT%H:%M"
@@ -177,7 +344,6 @@ def parse_shift_datetime(date_str: str, time_str: str) -> datetime:
 
 def parse_shift_window(date_str: str, start_time_str: str, end_time_str: str) -> tuple[datetime, datetime]:
     """Parse a shift into (start_dt, end_dt), adding 1 day to end_dt for overnight shifts."""
-    from datetime import timedelta
     start_dt = parse_shift_datetime(date_str, start_time_str)
     end_dt = parse_shift_datetime(date_str, end_time_str)
     # Overnight shift: end time is on the next calendar day.
@@ -250,6 +416,8 @@ def validate_monthly_payload(
         if as_int(worker.get("seniority", 0)) < 0:
             raise ValueError("worker seniority must be non-negative")
         normalize_worker_departments(worker)
+        normalize_worker_arrangements(worker)
+        normalize_worker_department_arrangements(worker)
 
     for shift in shifts:
         if not isinstance(shift, dict):
@@ -263,16 +431,21 @@ def validate_monthly_payload(
         if not isinstance(c, dict):
             raise ValueError("each constraint must be an object")
         worker_id = str(c.get("worker_id") or c.get("user_id") or "")
-        if not worker_id or "start_time" not in c or "end_time" not in c:
-            raise ValueError("constraint is missing worker_id/user_id, start_time, or end_time")
-        if c.get("priority", "SOFT") not in {"HARD", "SOFT"}:
+        if not worker_id:
+            raise ValueError("constraint is missing worker_id/user_id")
+        parse_timed_record_window(c, "constraint")
+        if normalize_priority(c.get("priority", "SOFT")) not in {"HARD", "SOFT"}:
             raise ValueError("constraint priority must be HARD or SOFT")
 
     worker_states = collect_worker_states(payload, workers)
     for state in worker_states:
         worker_id = str(state.get("worker_id") or state.get("user_id") or "")
-        if not worker_id or "start_time" not in state or "end_time" not in state:
-            raise ValueError("worker state is missing worker_id/user_id, start_time, or end_time")
+        if not worker_id:
+            raise ValueError("worker state is missing worker_id/user_id")
+        parse_timed_record_window(state, "worker state")
+        explicit_priority = state.get("priority") or state.get("constraint_priority")
+        if explicit_priority is not None and normalize_priority(explicit_priority) not in {"HARD", "SOFT"}:
+            raise ValueError("worker state priority must be HARD or SOFT")
 
     return workers, shifts, constraints, worker_states
 
@@ -308,6 +481,8 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
     worker_type: dict[str, str] = {}
     worker_seniority: dict[str, int] = {}
     worker_departments: dict[str, set[str] | None] = {}
+    worker_arrangements: dict[str, set[str] | None] = {}
+    worker_department_arrangements: dict[str, dict[str, set[str]] | None] = {}
 
     for worker in workers:
         worker_id = normalize_worker_id(worker)
@@ -315,10 +490,25 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
         worker_type[worker_id] = normalize_worker_type(worker)
         worker_seniority[worker_id] = as_int(worker.get("seniority", 0))
         worker_departments[worker_id] = normalize_worker_departments(worker)
+        worker_arrangements[worker_id] = normalize_worker_arrangements(worker)
+        worker_department_arrangements[worker_id] = normalize_worker_department_arrangements(worker)
 
     def worker_can_cover_shift(worker_id: str, shift: dict[str, Any]) -> bool:
+        department_id = str(shift["department_id"])
+        arrangement_id = str(shift.get("arrangement_id") or shift.get("arrangement") or "")
         allowed_departments = worker_departments[worker_id]
-        return allowed_departments is None or str(shift["department_id"]) in allowed_departments
+        if allowed_departments is not None and department_id not in allowed_departments:
+            return False
+
+        allowed_arrangements = worker_arrangements[worker_id]
+        if arrangement_id and allowed_arrangements is not None and arrangement_id not in allowed_arrangements:
+            return False
+
+        allowed_by_department = worker_department_arrangements[worker_id]
+        if arrangement_id and allowed_by_department is not None and department_id in allowed_by_department:
+            return arrangement_id in allowed_by_department[department_id]
+
+        return True
 
     model = cp_model.CpModel()
     assignment_vars: dict[tuple[str, Any], cp_model.IntVar] = {}
@@ -356,7 +546,7 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
                             f"in department {shift.get('department_id')}"
                         ),
                         "solver_meta": {
-                            "monthly_solver_version": 2,
+                            "monthly_solver_version": 3,
                             "department_id": shift.get("department_id"),
                             "arrangement_id": shift.get("arrangement_id"),
                         },
@@ -378,7 +568,22 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
                     model.Add(assignment_vars[(worker_id, s1)] + assignment_vars[(worker_id, s2)] <= 1)
 
     soft_penalty_terms: list[Any] = []
-    soft_penalties: list[tuple[cp_model.IntVar, int, int]] = []
+    soft_penalties: list[dict[str, Any]] = []
+    hard_state_blocks = 0
+
+    def add_soft_preference(var: cp_model.IntVar, worker_id: str, source: str, record: dict[str, Any]) -> None:
+        seniority = worker_seniority[worker_id]
+        weight = preference_weight(record, seniority)
+        soft_penalty_terms.append(var * weight)
+        soft_penalties.append(
+            {
+                "var": var,
+                "weight": weight,
+                "seniority": seniority,
+                "source": source,
+                "worker_id": worker_id,
+            }
+        )
 
     # User constraints: HARD blocks, SOFT uses seniority-weighted penalty.
     for c in constraints:
@@ -386,12 +591,11 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
         if worker_id not in worker_by_id:
             continue
 
-        c_start = parse_iso_datetime(str(c["start_time"]))
-        c_end = parse_iso_datetime(str(c["end_time"]))
+        c_start, c_end = parse_timed_record_window(c, "constraint")
         if c_end <= c_start:
             continue
 
-        priority = str(c.get("priority", "SOFT"))
+        priority = normalize_priority(c.get("priority", "SOFT")) or "SOFT"
         for shift_id, (s_start, s_end) in shift_windows.items():
             var = assignment_vars.get((worker_id, shift_id))
             if var is None or not intervals_overlap(c_start, c_end, s_start, s_end):
@@ -400,29 +604,32 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
             if priority == "HARD":
                 model.Add(var == 0)
             else:
-                seniority = worker_seniority[worker_id]
-                weight = 1000 + seniority * 100
-                soft_penalty_terms.append(var * weight)
-                soft_penalties.append((var, weight, seniority))
+                add_soft_preference(var, worker_id, "constraint", c)
 
-    # Worker states: course/vacation/sick can block assignment across date ranges.
+    # Worker states from the monthly model / Excel import:
+    # hard states block, soft requests become seniority-weighted preferences.
     for state in worker_states:
-        if not state_blocks_assignment(state):
-            continue
-
         worker_id = str(state.get("worker_id") or state.get("user_id"))
         if worker_id not in worker_by_id:
             continue
 
-        state_start = parse_iso_datetime(str(state["start_time"]))
-        state_end = parse_iso_datetime(str(state["end_time"]))
+        state_start, state_end = parse_timed_record_window(state, "worker state")
         if state_end <= state_start:
+            continue
+
+        effect = worker_state_effect(state)
+        if effect == "ignore":
             continue
 
         for shift_id, (s_start, s_end) in shift_windows.items():
             var = assignment_vars.get((worker_id, shift_id))
-            if var is not None and intervals_overlap(state_start, state_end, s_start, s_end):
+            if var is None or not intervals_overlap(state_start, state_end, s_start, s_end):
+                continue
+            if effect == "hard":
                 model.Add(var == 0)
+                hard_state_blocks += 1
+            elif effect == "soft":
+                add_soft_preference(var, worker_id, "worker_state", state)
 
     # Monthly fairness: equalize total shift count between workers of the same worker_type.
     fairness_terms: list[cp_model.IntVar] = []
@@ -480,7 +687,7 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
                 "status": "infeasible",
                 "assignments": [],
                 "message": "no feasible monthly assignment found",
-                "solver_meta": {"monthly_solver_version": 2},
+                "solver_meta": {"monthly_solver_version": 3},
             }
         )
 
@@ -500,12 +707,22 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
             }
         )
 
-    soft_violations = sum(int(solver.Value(var)) for var, _weight, _seniority in soft_penalties)
+    soft_violations = sum(int(solver.Value(penalty["var"])) for penalty in soft_penalties)
     weighted_soft_penalty = sum(
-        int(solver.Value(var)) * weight for var, weight, _seniority in soft_penalties
+        int(solver.Value(penalty["var"])) * int(penalty["weight"]) for penalty in soft_penalties
     )
     seniority_penalty = sum(
-        int(solver.Value(var)) * seniority for var, _weight, seniority in soft_penalties
+        int(solver.Value(penalty["var"])) * int(penalty["seniority"]) for penalty in soft_penalties
+    )
+    soft_constraint_violations = sum(
+        int(solver.Value(penalty["var"]))
+        for penalty in soft_penalties
+        if penalty["source"] == "constraint"
+    )
+    soft_state_violations = sum(
+        int(solver.Value(penalty["var"]))
+        for penalty in soft_penalties
+        if penalty["source"] == "worker_state"
     )
     fairness_imbalance = sum(int(solver.Value(term)) for term in fairness_terms)
     solver_status = "optimal" if status == cp_model.OPTIMAL else "feasible"
@@ -515,14 +732,17 @@ def solve_monthly_payload(payload: dict[str, Any]) -> Any:
             "status": "feasible",
             "assignments": assignments,
             "solver_meta": {
-                "monthly_solver_version": 2,
+                "monthly_solver_version": 3,
                 "month": payload.get("month"),
                 "solver_status": solver_status,
                 "objective_value": solver.ObjectiveValue(),
                 "soft_violations": soft_violations,
+                "soft_constraint_violations": soft_constraint_violations,
+                "soft_state_violations": soft_state_violations,
                 "weighted_soft_penalty": weighted_soft_penalty,
                 "seniority_penalty": seniority_penalty,
                 "fairness_imbalance": fairness_imbalance,
+                "hard_state_blocks": hard_state_blocks,
                 "wall_time_seconds": solver.WallTime(),
             },
         }

@@ -86,13 +86,15 @@ Use this shape for the new hospital scheduling model:
       "id": "u1",
       "worker_type": "senior_doctor",
       "seniority": 10,
-      "department_ids": ["delivery", "womens_er"]
+      "department_ids": ["delivery", "womens_er"],
+      "arrangement_ids": ["regular", "night"]
     },
     {
       "id": "u2",
       "worker_type": "resident",
       "seniority": 2,
-      "department_ids": ["delivery"]
+      "department_ids": ["delivery"],
+      "department_arrangements": { "delivery": ["regular"] }
     }
   ],
   "shifts": [
@@ -124,6 +126,11 @@ Use this shape for the new hospital scheduling model:
       "state": "בקורס",
       "start_time": "2026-05-05T00:00:00+03:00",
       "end_time": "2026-05-07T23:59:59+03:00"
+    },
+    {
+      "worker_id": "u1",
+      "state": "vacation_request",
+      "date": "2026-05-10"
     }
   ]
 }
@@ -133,10 +140,13 @@ Monthly rules:
 
 - Requirements are per shift, per department, per arrangement.
 - A worker can work different departments in different shifts if `department_ids` allows it.
+- A worker can also be limited by `arrangement_ids`, or by `department_arrangements` for department-specific arrangement eligibility.
 - A worker cannot be assigned to overlapping shifts across departments.
 - `HARD` constraints block assignment.
 - `SOFT` constraints use seniority-weighted penalties. Violating a senior worker costs more than violating a junior worker, so the solver protects senior preferences when possible.
 - Blocking worker states such as `בקורס`, `בחופש`, and `מחלה` behave like hard unavailability.
+- Request states such as `vacation_request`, `requested_vacation`, `preference`, or Hebrew free-text requests behave like soft preferences.
+- Worker states can be expressed with `start_time`/`end_time`, `start_date`/`end_date`, or a single full-day `date`.
 - Fairness minimizes monthly shift-count imbalance between workers of the same `worker_type`.
 
 Monthly response assignments include department context:
@@ -155,12 +165,15 @@ Monthly response assignments include department context:
     }
   ],
   "solver_meta": {
-    "monthly_solver_version": 2,
+    "monthly_solver_version": 3,
     "month": "2026-05",
     "soft_violations": 0,
+    "soft_constraint_violations": 0,
+    "soft_state_violations": 0,
     "weighted_soft_penalty": 0,
     "seniority_penalty": 0,
-    "fairness_imbalance": 0
+    "fairness_imbalance": 0,
+    "hard_state_blocks": 0
   }
 }
 ```
