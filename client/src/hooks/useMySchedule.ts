@@ -33,7 +33,10 @@ export function useMySchedule(token: string) {
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const weekCacheRef = useRef<WeekCache>({});
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  weekCacheRef.current = weekCache;
+
+  useEffect(() => {
+    weekCacheRef.current = weekCache;
+  }, [weekCache]);
 
   const flashThen = useCallback((key: string, navigate: () => void) => {
     if (navTimerRef.current) {
@@ -101,6 +104,7 @@ export function useMySchedule(token: string) {
   useEffect(() => {
     if (!token) return;
     if (requiredWeekStarts.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

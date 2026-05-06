@@ -1,732 +1,160 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Navigate } from "react-router-dom";
-import {
-  BadgeCheck,
-  BrainCircuit,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  History,
-  Lock,
-  Pencil,
-  Send,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Navigate, useNavigate } from "react-router-dom";
+import { AlertTriangle, Building2, CalendarDays, RefreshCcw, Users } from "lucide-react";
 import { AuthService } from "../services/auth.service";
-import { LoadingSpinner } from "../components/ui/LoadingIndicator";
-import { staffingFields, type StaffingField } from "../utils/staffing";
-
-import WeekBar from "../components/shifts/WeekBar";
-import WeekPickerModal from "../components/shifts/WeekPickerModal";
-import WeekShiftGrid from "../components/shifts/WeekShiftGrid";
-import DuplicateWeekModal from "../components/shifts/DuplicateWeekModal";
-import CollectionDeadlineModal from "../components/shifts/CollectionDeadlineModal";
-import type { ShiftAssignmentEntry } from "../components/shifts/ScheduleShiftCard";
-
-import type { Shift, WeekStatus, WeekSummary } from "../components/types";
-import ShiftFormModal from "../components/shifts/ShiftFormModal";
-import {
-  getWeekDates,
-  parseIsoDateToUtc,
-  addDaysToIsoDate,
-  normalizeApiDateToIso,
-  normalizeApiTimeToHourMinute,
-  getJerusalemTodayIsoDate,
-  startOfWeekSundayIso,
-} from "../utils/date.utils";
+import { LoadingSpinner, LoadingState } from "../components/ui/LoadingIndicator";
+import ResizableSplit from "../components/ui/ResizableSplit";
+import { useStoredNumber } from "../hooks/useStoredNumber";
 
 const API_BASE = "http://localhost:3000/api";
 const ISRAEL_TIMEZONE = "Asia/Jerusalem";
 
-const dateFormatter = new Intl.DateTimeFormat("he-IL", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: ISRAEL_TIMEZONE,
-});
-
-const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: ISRAEL_TIMEZONE,
-});
-
-const weekStatusLabel: Record<WeekStatus, string> = {
-  DRAFT: "טיוטה",
-  COLLECTING: "איסוף אילוצים",
-  LOCKED: "נעול",
-  SOLVED: "שובץ",
-  PUBLISHED: "פורסם",
-};
-
-const weekStatusStyle: Record<WeekStatus, string> = {
-  DRAFT: "bg-slate-100 text-slate-600",
-  COLLECTING: "bg-blue-100 text-blue-800",
-  LOCKED: "bg-amber-100 text-amber-800",
-  SOLVED: "bg-teal-100 text-teal-800",
-  PUBLISHED: "bg-green-100 text-green-800",
-};
-
 export default function ShiftPage() {
   const session = AuthService.getSession();
   const token = session?.jwtToken ?? "";
+  const navigate = useNavigate();
 
-  const [weeks, setWeeks] = useState<WeekSummary[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState(() =>
-    startOfWeekSundayIso(getJerusalemTodayIsoDate()),
-  );
-  const [loadingWeeks, setLoadingWeeks] = useState(true);
-
-  const [showWeekModal, setShowWeekModal] = useState(false);
-  const [showDuplicateWeekModal, setShowDuplicateWeekModal] = useState(false);
-  const [showCollectionDeadlineModal, setShowCollectionDeadlineModal] = useState(false);
-  const [openingCollection, setOpeningCollection] = useState(false);
-
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [loadingShifts, setLoadingShifts] = useState(false);
-
-  const [scheduleAssignments, setScheduleAssignments] = useState<
-    Record<number, ShiftAssignmentEntry[]>
-  >({});
-
-  type VersionSummary = {
+  type DeptStatus = {
     id: string;
-    versionNumber: number;
-    isPublished: boolean;
-    createdAt: string;
-    assignmentCount: number;
-    solverMeta: Record<string, unknown> | null;
+    name: string;
+    code: string;
+    totalMembers: number;
+    activeMembers: number;
+    inactiveMembers: number;
+    inactiveBreakdown?: Record<string, number>;
+
+    requiredTotal?: number;
+    requiredSenior?: number;
+    requiredRegular?: number;
+    requiredIntern?: number;
+
+    metAssigned?: boolean;
+    missingAssigned?: { total?: number; senior?: number; regular?: number; intern?: number };
+    metActive?: boolean;
+    missingActive?: { total?: number; senior?: number; regular?: number; intern?: number };
   };
-  const [versions, setVersions] = useState<VersionSummary[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState("");
-  const [publishing, setPublishing] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Manual edit state for resolved schedule
-  const [editMode, setEditMode] = useState(false);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [addSelections, setAddSelections] = useState<Record<number, string>>({});
-  const [allStaff, setAllStaff] = useState<
-    { id: string; full_name: string; role: string }[]
-  >([]);
+  type MonthPlan = {
+    department: { id: string; name: string; code: string };
+    month: string; // YYYY-MM
+    timezone?: string;
+    days: Array<{
+      date: string; // YYYY-MM-DD
+      shifts?: Array<{
+        id: string | number;
+        label?: string;
+        startTime?: string;
+        endTime?: string;
+        assignmentsCount?: number;
+      }>;
+    }>;
+  };
 
-  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
-  const [shiftModalMode, setShiftModalMode] = useState<"create" | "edit">("create");
-  const [draftShiftDate, setDraftShiftDate] = useState("");
-  const [shiftToEdit, setShiftToEdit] = useState<Shift | null>(null);
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  });
 
-  // Solver flow state
-  type SolveRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-  const [activeSolveRun, setActiveSolveRun] = useState<{
-    runId: string;
-    status: SolveRunStatus;
-    errorMessage: string | null;
-  } | null>(null);
-  const [solving, setSolving] = useState(false);
-  const [forceLocking, setForceLocking] = useState(false);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [deptStatuses, setDeptStatuses] = useState<DeptStatus[]>([]);
+  const [loadingDeptStatuses, setLoadingDeptStatuses] = useState(true);
+  const [deptStatusesError, setDeptStatusesError] = useState("");
+
+  const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+  const [monthPlan, setMonthPlan] = useState<MonthPlan | null>(null);
+  const [loadingMonthPlan, setLoadingMonthPlan] = useState(false);
+  const [monthPlanError, setMonthPlanError] = useState("");
+
+  const splitPct = useStoredNumber("planli:controlRoomSplitPct", 38, {
+    min: 26,
+    max: 55,
+  });
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
     [token],
   );
 
-  const fetchWeeks = useCallback(async () => {
-    if (!token) return;
-
-    try {
-      setLoadingWeeks(true);
-
-      const res = await axios.get<{ weeks: WeekSummary[] }>(
-        `${API_BASE}/weeks`,
-        {
-          headers: authHeaders,
-        },
-      );
-
-      const loadedWeeks = (res.data.weeks ?? []).map((w) => ({
-        ...w,
-        weekStart: normalizeApiDateToIso(w.weekStart),
-      }));
-
-      setWeeks(loadedWeeks);
-
-      setSelectedWeek((current) => {
-        if (!current) return loadedWeeks[0]?.weekStart ?? "";
-        return current;
-      });
-    } catch (error: any) {
-      console.error("Error loading weeks:", error);
-      alert(
-        `שגיאה בטעינת השבועות: ${error.response?.data?.error ?? "Unknown error"}`,
-      );
-      setWeeks([]);
-      setSelectedWeek("");
-    } finally {
-      setLoadingWeeks(false);
-    }
-  }, [authHeaders, token]);
-
-  const fetchShifts = useCallback(
-    async (weekStart: string) => {
-      if (!token || !weekStart) return;
-
-      try {
-        setLoadingShifts(true);
-
-        const res = await axios.get<{ shifts: Shift[] }>(
-          `${API_BASE}/shifts/week/${weekStart}`,
-          { headers: authHeaders },
-        );
-
-        setShifts(
-          (res.data.shifts ?? []).map((shift) => ({
-            ...shift,
-            weekStart: normalizeApiDateToIso(shift.weekStart),
-            shiftDate: normalizeApiDateToIso(shift.shiftDate),
-            startTime: normalizeApiTimeToHourMinute(shift.startTime) || shift.startTime,
-            endTime: normalizeApiTimeToHourMinute(shift.endTime) || shift.endTime,
-          })),
-        );
-      } catch (error: any) {
-        console.error("Error loading shifts:", error);
-        alert(
-          `שגיאה בטעינת המשמרות: ${error.response?.data?.error ?? "Unknown error"}`,
-        );
-        setShifts([]);
-      } finally {
-        setLoadingShifts(false);
-      }
-    },
-    [authHeaders, token],
-  );
-
-  useEffect(() => {
-    if (!token) return;
-
-    const initializeCurrentWeek = async () => {
-      const currentWeekStart = startOfWeekSundayIso(getJerusalemTodayIsoDate());
-      setSelectedWeek(currentWeekStart);
-
-      try {
-        await axios.post(
-          `${API_BASE}/weeks`,
-          { week_start: currentWeekStart },
-          { headers: authHeaders },
-        );
-      } catch (error) {
-        console.error("Error ensuring current week:", error);
-      }
-
-      await fetchWeeks();
-    };
-
-    void initializeCurrentWeek();
-  }, [authHeaders, fetchWeeks, token]);
-
-  useEffect(() => {
-    if (selectedWeek) void fetchShifts(selectedWeek);
-    else setShifts([]);
-  }, [selectedWeek, fetchShifts]);
-
-  const fetchVersionDetail = useCallback(
-    async (versionId: string) => {
-      if (!versionId) {
-        setScheduleAssignments({});
-        return;
-      }
-      try {
-        const detailRes = await axios.get<{
-          version: { assignments: (ShiftAssignmentEntry & { shiftId: number })[] };
-        }>(`${API_BASE}/schedule-versions/${versionId}`, { headers: authHeaders });
-        const map: Record<number, ShiftAssignmentEntry[]> = {};
-        for (const a of detailRes.data.version.assignments ?? []) {
-          const list = map[a.shiftId] ?? [];
-          list.push({
-            userId: a.userId,
-            userFullName: a.userFullName,
-            userRole: a.userRole,
-            source: a.source,
-          });
-          map[a.shiftId] = list;
-        }
-        setScheduleAssignments(map);
-      } catch {
-        setScheduleAssignments({});
-      }
-    },
-    [authHeaders],
-  );
-
-  const fetchVersions = useCallback(
-    async (weekStart: string, options: { keepSelection?: boolean } = {}) => {
-      if (!token || !weekStart) return;
-      try {
-        const listRes = await axios.get<{ versions: VersionSummary[] }>(
-          `${API_BASE}/weeks/${weekStart}/schedule-versions`,
-          { headers: authHeaders },
-        );
-        const items = listRes.data.versions ?? [];
-        setVersions(items);
-
-        const next = options.keepSelection
-          ? selectedVersionId && items.some((v) => v.id === selectedVersionId)
-            ? selectedVersionId
-            : items[0]?.id ?? ""
-          : items[0]?.id ?? "";
-        setSelectedVersionId(next);
-        if (next) await fetchVersionDetail(next);
-        else setScheduleAssignments({});
-      } catch {
-        setVersions([]);
-        setSelectedVersionId("");
-        setScheduleAssignments({});
-      }
-    },
-    [authHeaders, fetchVersionDetail, selectedVersionId, token],
-  );
-
-  const fetchAllStaff = useCallback(async () => {
-    if (!token) return;
-    try {
-      const res = await axios.get<{ id: string; full_name: string; role: string }[]>(
-        `${API_BASE}/users`,
-        { headers: authHeaders },
-      );
-      setAllStaff(res.data.filter((u) => u.role === "doctor" || u.role === "nurse"));
-    } catch {
-      // non-critical
-    }
-  }, [authHeaders, token]);
-
-  const handleEnterEditMode = useCallback(() => {
-    void fetchAllStaff();
-    setEditMode(true);
-    setAddSelections({});
-  }, [fetchAllStaff]);
-
-  const handleRemoveAssignment = useCallback(
-    async (shiftId: number, userId: string) => {
-      if (!selectedVersionId) return;
-      setSavingEdit(true);
-      try {
-        await axios.delete(
-          `${API_BASE}/schedule-versions/${selectedVersionId}/assignments/${shiftId}/${userId}`,
-          { headers: authHeaders },
-        );
-        await fetchVersionDetail(selectedVersionId);
-      } catch (e: any) {
-        alert(`שגיאה בהסרת שיבוץ: ${e.response?.data?.error ?? "Unknown error"}`);
-      } finally {
-        setSavingEdit(false);
-      }
-    },
-    [authHeaders, fetchVersionDetail, selectedVersionId],
-  );
-
-  const handleAddAssignment = useCallback(
-    async (shiftId: number) => {
-      const userId = addSelections[shiftId];
-      if (!selectedVersionId || !userId) return;
-      setSavingEdit(true);
-      try {
-        await axios.post(
-          `${API_BASE}/schedule-versions/${selectedVersionId}/assignments`,
-          { shift_id: shiftId, user_id: userId },
-          { headers: authHeaders },
-        );
-        setAddSelections((prev) => ({ ...prev, [shiftId]: "" }));
-        await fetchVersionDetail(selectedVersionId);
-      } catch (e: any) {
-        alert(`שגיאה בהוספת שיבוץ: ${e.response?.data?.error ?? "Unknown error"}`);
-      } finally {
-        setSavingEdit(false);
-      }
-    },
-    [addSelections, authHeaders, fetchVersionDetail, selectedVersionId],
-  );
-
-  const handlePublish = useCallback(async () => {
-    if (!selectedVersionId) return;
-    setPublishing(true);
-    try {
-      await axios.post(
-        `${API_BASE}/schedule-versions/${selectedVersionId}/publish`,
-        {},
-        { headers: authHeaders },
-      );
-      await fetchVersions(selectedWeek, { keepSelection: true });
-    } catch (e: any) {
-      alert(`שגיאה בפרסום: ${e.response?.data?.error ?? "Unknown error"}`);
-    } finally {
-      setPublishing(false);
-    }
-  }, [authHeaders, fetchVersions, selectedVersionId, selectedWeek]);
-
-  const handleSelectVersion = useCallback(
-    async (versionId: string) => {
-      setSelectedVersionId(versionId);
-      setEditMode(false);
-      setAddSelections({});
-      await fetchVersionDetail(versionId);
-      setHistoryOpen(false);
-    },
-    [fetchVersionDetail],
-  );
-
-  const handleSetAddSelection = useCallback((shiftId: number, userId: string) => {
-    setAddSelections((prev) => ({ ...prev, [shiftId]: userId }));
+  const getApiErrorMessage = useCallback((error: unknown, fallback: string) => {
+    if (!axios.isAxiosError(error)) return fallback;
+    const data = error.response?.data;
+    if (!data || typeof data !== "object") return fallback;
+    if (!("error" in data)) return fallback;
+    const record = data as Record<string, unknown>;
+    return typeof record.error === "string" ? record.error : fallback;
   }, []);
 
-  const weekDates = useMemo(
-    () => (selectedWeek ? getWeekDates(selectedWeek) : []),
-    [selectedWeek],
-  );
+  const monthLabel = useMemo(() => {
+    const parsed = new Date(`${month}-01T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return month;
+    return new Intl.DateTimeFormat("he-IL", {
+      year: "numeric",
+      month: "long",
+      timeZone: ISRAEL_TIMEZONE,
+    }).format(parsed);
+  }, [month]);
 
-  const selectedWeekRangeLabel = useMemo(() => {
-    if (weekDates.length !== 7)
-      return loadingWeeks ? "טוען..." : "בחר שבוע לתצוגה";
-    return `${dateFormatter.format(parseIsoDateToUtc(weekDates[0]))} - ${dateFormatter.format(
-      parseIsoDateToUtc(weekDates[6]),
-    )}`;
-  }, [weekDates, loadingWeeks]);
-
-  const defaultDuplicateTargetWeek = useMemo(
-    () => (selectedWeek ? addDaysToIsoDate(selectedWeek, 7) : ""),
-    [selectedWeek],
-  );
-
-  const selectedWeekSummary = useMemo(
-    () => weeks.find((week) => week.weekStart === selectedWeek) ?? null,
-    [selectedWeek, weeks],
-  );
-
-  useEffect(() => {
-    const status = selectedWeekSummary?.status;
-    if (status === "SOLVED" || status === "PUBLISHED") {
-      void fetchVersions(selectedWeek);
-    } else {
-      setVersions([]);
-      setSelectedVersionId("");
-      setScheduleAssignments({});
-    }
-    setEditMode(false);
-    setAddSelections({});
-    setHistoryOpen(false);
-  }, [selectedWeek, selectedWeekSummary?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const selectedWeekDeadlineLabel = useMemo(() => {
-    const deadline = selectedWeekSummary?.collectionDeadline;
-    if (!deadline) return "לא נקבע";
-
-    const parsed = new Date(deadline);
-    if (Number.isNaN(parsed.getTime())) return deadline;
-
-    return dateTimeFormatter.format(parsed);
-  }, [selectedWeekSummary]);
-
-  const canOpenCollection = useMemo(() => {
-    if (!selectedWeekSummary) return false;
-    if (selectedWeekSummary.shiftsCount <= 0) return false;
-    if (
-      selectedWeekSummary.status === "LOCKED" ||
-      selectedWeekSummary.status === "SOLVED" ||
-      selectedWeekSummary.status === "PUBLISHED"
-    ) {
-      return false;
-    }
-    return true;
-  }, [selectedWeekSummary]);
-
-  const handleSelectWeekStart = useCallback(
-    async (weekStart: string) => {
-      if (!token) return;
-
-      try {
-        const exists = weeks.some((w) => w.weekStart === weekStart);
-
-        if (!exists) {
-          await axios.post(
-            `${API_BASE}/weeks`,
-            { week_start: weekStart },
-            { headers: authHeaders },
-          );
-          await fetchWeeks();
-        }
-
-        setSelectedWeek(weekStart);
-      } catch (error: any) {
-        console.error("Error selecting/creating week:", error);
-        alert(
-          `שגיאה בבחירת שבוע: ${error.response?.data?.error ?? "Unknown error"}`,
-        );
-      }
-    },
-    [authHeaders, fetchWeeks, token, weeks],
-  );
-
-  const navigateWeekByOffset = useCallback(
-    async (daysOffset: number) => {
-      if (!selectedWeek) return;
-
-      const newWeekStart = addDaysToIsoDate(selectedWeek, daysOffset);
-
-      try {
-        const exists = weeks.some((w) => w.weekStart === newWeekStart);
-
-        if (!exists) {
-          await axios.post(
-            `${API_BASE}/weeks`,
-            { week_start: newWeekStart },
-            { headers: authHeaders },
-          );
-
-          await fetchWeeks();
-        }
-
-        setSelectedWeek(newWeekStart);
-      } catch (error: any) {
-        console.error("Error navigating week:", error);
-        alert(
-          `שגיאה במעבר שבוע: ${error.response?.data?.error ?? "Unknown error"}`,
-        );
-      }
-    },
-    [selectedWeek, weeks, authHeaders, fetchWeeks],
-  );
-
-  const handleAddShift = (shiftDate: string) => {
-    setShiftModalMode("create");
-    setDraftShiftDate(shiftDate);
-    setShiftToEdit(null);
-    setIsShiftModalOpen(true);
-  };
-
-  const handleEditShift = (shift: Shift) => {
-    setShiftModalMode("edit");
-    setDraftShiftDate(shift.shiftDate);
-    setShiftToEdit(shift);
-    setIsShiftModalOpen(true);
-  };
-
-  const handleSubmitShift = useCallback(
-    async (values: {
-      shiftDate: string;
-      startTime: string;
-      endTime: string;
-    } & Record<StaffingField, number>) => {
-      if (!selectedWeek) return;
-      const normalizedStartTime = normalizeApiTimeToHourMinute(values.startTime);
-      const normalizedEndTime = normalizeApiTimeToHourMinute(values.endTime);
-
-      if (!normalizedStartTime || !normalizedEndTime) {
-        alert("שעת התחלה ושעת סיום חייבות להיות בפורמט HH:mm.");
-        throw new Error("Invalid shift time format");
-      }
-
-      const payload = {
-        week_start: selectedWeek,
-        shift_date: values.shiftDate,
-        start_time: normalizedStartTime,
-        end_time: normalizedEndTime,
-        ...Object.fromEntries(
-          staffingFields.map((field) => [field.apiField, values[field.field]]),
-        ),
-      };
-
-      try {
-        if (shiftModalMode === "create") {
-          await axios.post(`${API_BASE}/shifts`, payload, { headers: authHeaders });
-        } else if (shiftToEdit) {
-          await axios.put(
-            `${API_BASE}/shifts/${shiftToEdit.id}`,
-            {
-              shift_date: payload.shift_date,
-              start_time: payload.start_time,
-              end_time: payload.end_time,
-              ...Object.fromEntries(
-                staffingFields.map((field) => [field.apiField, values[field.field]]),
-              ),
-            },
-            { headers: authHeaders },
-          );
-        }
-
-        await fetchShifts(selectedWeek);
-        await fetchWeeks();
-      } catch (error: any) {
-        console.error("Error saving shift:", error);
-        alert(`שגיאה בשמירת משמרת: ${error.response?.data?.error ?? "Unknown error"}`);
-        throw error;
-      }
-    },
-    [authHeaders, fetchShifts, fetchWeeks, selectedWeek, shiftModalMode, shiftToEdit],
-  );
-
-  const handleDeleteShift = async (shiftId: number) => {
-    const ok = window.confirm("למחוק את המשמרת הזו?");
-    if (!ok) return;
-
+  const fetchDeptStatuses = useCallback(async () => {
+    if (!token) return;
     try {
-      await axios.delete(`${API_BASE}/shifts/${shiftId}`, {
-        headers: authHeaders,
-      });
-      if (selectedWeek) await fetchShifts(selectedWeek);
-      await fetchWeeks(); // כדי לעדכן shiftsCount
-    } catch (error: any) {
-      console.error("Error deleting shift:", error);
-      alert(
-        `שגיאה במחיקת משמרת: ${error.response?.data?.error ?? "Unknown error"}`,
-      );
-    }
-  };
-
-  const handleDuplicateWeek = useCallback(
-    async (values: { sourceWeekStart: string; targetWeekStart: string }) => {
-      if (!token) return;
-
-      try {
-        const normalizedSourceWeek = startOfWeekSundayIso(values.sourceWeekStart);
-        const normalizedTargetWeek = startOfWeekSundayIso(values.targetWeekStart);
-
-        if (!normalizedSourceWeek || !normalizedTargetWeek) {
-          throw new Error("source and target weeks must be valid ISO dates");
-        }
-
-        await axios.post(
-          `${API_BASE}/weeks/duplicate`,
-          {
-            source_week_start: normalizedSourceWeek,
-            target_week_start: normalizedTargetWeek,
-          },
-          { headers: authHeaders },
-        );
-
-        await fetchWeeks();
-        setSelectedWeek(normalizedTargetWeek);
-        await fetchShifts(normalizedTargetWeek);
-      } catch (error: any) {
-        console.error("Error duplicating week:", error);
-        alert(`שגיאה בשכפול שבוע: ${error.response?.data?.error ?? "Unknown error"}`);
-        throw error;
-      }
-    },
-    [authHeaders, fetchShifts, fetchWeeks, token],
-  );
-
-  const openConstraintCollection = useCallback(
-    async (deadlineIso: string) => {
-      if (!selectedWeek) return;
-
-      try {
-        setOpeningCollection(true);
-        await axios.post(
-          `${API_BASE}/weeks/${selectedWeek}/open-collection`,
-          { collection_deadline: deadlineIso },
-          { headers: authHeaders },
-        );
-        await fetchWeeks();
-      } catch (error: any) {
-        console.error("Error opening collection:", error);
-        alert(
-          `שגיאה בפתיחת איסוף אילוצים: ${error.response?.data?.error ?? "שגיאה לא ידועה"}`,
-        );
-        throw error;
-      } finally {
-        setOpeningCollection(false);
-      }
-    },
-    [authHeaders, fetchWeeks, selectedWeek],
-  );
-
-  // Clear polling interval on unmount.
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
-
-  // Reset solver run state when the selected week changes.
-  useEffect(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-    setActiveSolveRun(null);
-  }, [selectedWeek]);
-
-  const pollSolveRun = useCallback(
-    async (runId: string) => {
-      try {
-        const res = await axios.get<{ run: { id: string; status: string; errorMessage: string | null } }>(
-          `${API_BASE}/solve-runs/${runId}`,
-          { headers: authHeaders },
-        );
-        const run = res.data.run;
-        const status = run.status as "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-        setActiveSolveRun({ runId, status, errorMessage: run.errorMessage });
-
-        if (status === "SUCCEEDED" || status === "FAILED") {
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-          }
-          if (status === "SUCCEEDED") {
-            await fetchWeeks();
-          }
-        }
-      } catch {
-        // Ignore transient network errors during polling.
-      }
-    },
-    [authHeaders, fetchWeeks],
-  );
-
-  const handleSolveWeek = useCallback(async () => {
-    if (!selectedWeek) return;
-    try {
-      setSolving(true);
-      const res = await axios.post<{ queued: boolean; run: { id: string; status: string } }>(
-        `${API_BASE}/weeks/${selectedWeek}/solve`,
-        {},
+      setLoadingDeptStatuses(true);
+      setDeptStatusesError("");
+      const res = await axios.get<{ departments: DeptStatus[] }>(
+        `${API_BASE}/departments/status?month=${encodeURIComponent(month)}`,
         { headers: authHeaders },
       );
-      const run = res.data.run;
-      setActiveSolveRun({ runId: run.id, status: run.status as "QUEUED", errorMessage: null });
-
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = setInterval(() => {
-        void pollSolveRun(run.id);
-      }, 2000);
-    } catch (error: any) {
-      const msg = error?.response?.data?.error ?? "שגיאה לא ידועה";
-      alert(`שגיאה בהפעלת השיבוץ: ${msg}`);
+      const list = res.data.departments ?? [];
+      setDeptStatuses(list);
+      setSelectedDeptId((current) => {
+        if (current && list.some((d) => d.id === current)) return current;
+        return list[0]?.id ?? "";
+      });
+    } catch (e: unknown) {
+      setDeptStatuses([]);
+      setDeptStatusesError(getApiErrorMessage(e, "שגיאה בטעינת סטטוס מחלקות"));
+      setSelectedDeptId("");
     } finally {
-      setSolving(false);
+      setLoadingDeptStatuses(false);
     }
-  }, [authHeaders, selectedWeek, pollSolveRun]);
+  }, [authHeaders, getApiErrorMessage, month, token]);
 
-  const handleForceLock = useCallback(async () => {
-    if (!selectedWeek) return;
-    try {
-      setForceLocking(true);
-      await axios.post(`${API_BASE}/weeks/${selectedWeek}/lock`, {}, { headers: authHeaders });
-      await fetchWeeks();
-    } catch (error: any) {
-      const msg = error?.response?.data?.error ?? "שגיאה לא ידועה";
-      alert(`שגיאה בנעילת השבוע: ${msg}`);
-    } finally {
-      setForceLocking(false);
+  const fetchMonthPlan = useCallback(
+    async (departmentId: string) => {
+      if (!token || !departmentId) return;
+      try {
+        setLoadingMonthPlan(true);
+        setMonthPlanError("");
+        const res = await axios.get<MonthPlan>(
+          `${API_BASE}/departments/${encodeURIComponent(departmentId)}/month-plan?month=${encodeURIComponent(month)}`,
+          { headers: authHeaders },
+        );
+        setMonthPlan(res.data);
+      } catch (e: unknown) {
+        setMonthPlan(null);
+        setMonthPlanError(getApiErrorMessage(e, "שגיאה בטעינת תוכנית חודשית"));
+      } finally {
+        setLoadingMonthPlan(false);
+      }
+    },
+    [authHeaders, getApiErrorMessage, month, token],
+  );
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchDeptStatuses();
+  }, [fetchDeptStatuses]);
+
+  useEffect(() => {
+    if (!selectedDeptId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMonthPlan(null);
+      setMonthPlanError("");
+      return;
     }
-  }, [authHeaders, selectedWeek, fetchWeeks]);
-
-  const isSolverRunning =
-    activeSolveRun?.status === "QUEUED" || activeSolveRun?.status === "RUNNING";
+    void fetchMonthPlan(selectedDeptId);
+  }, [fetchMonthPlan, selectedDeptId]);
 
   if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "admin") return <Navigate to="/chat" replace />;
@@ -734,350 +162,290 @@ export default function ShiftPage() {
   return (
     <div dir="rtl" className="w-full px-4 sm:px-6 lg:px-12 py-6 self-start">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">ניהול משמרות</h1>
-          <p className="text-slate-500 mt-1">
-            בחירת שבוע וניהול משמרות לפי ימים.
-          </p>
-        </div>
-
-        <WeekBar
-          selectedWeekRangeLabel={selectedWeekRangeLabel}
-          canGoPrev={!!selectedWeek}
-          canGoNext={!!selectedWeek}
-          canDuplicate={weeks.length > 0}
-          onPrev={() => navigateWeekByOffset(-7)}
-          onNext={() => navigateWeekByOffset(7)}
-          onOpenPicker={() => setShowWeekModal(true)}
-          onOpenDuplicate={() => setShowDuplicateWeekModal(true)}
-        />
-
-        {/* Compact toolbar: status + all actions in one strip */}
-        <section className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm space-y-2">
-          {/* Top row: status info + all action buttons */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {/* Status badge */}
-            <span
-              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                selectedWeekSummary
-                  ? weekStatusStyle[selectedWeekSummary.status]
-                  : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {selectedWeekSummary
-                ? weekStatusLabel[selectedWeekSummary.status]
-                : "לא נבחר שבוע"}
-            </span>
-
-            {/* Deadline */}
-            <span className="text-xs text-slate-500">
-              דדליין: <strong className="text-slate-800">{selectedWeekDeadlineLabel}</strong>
-            </span>
-
-            {/* Warning */}
-            {selectedWeekSummary?.shiftsCount === 0 ? (
-              <span className="text-xs text-amber-700">
-                יש להוסיף משמרת לפני פתיחת איסוף.
-              </span>
-            ) : null}
-
-            {/* Spacer pushes buttons right */}
-            <div className="flex-1" />
-
-            {/* All action buttons in one row */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowCollectionDeadlineModal(true)}
-                disabled={!canOpenCollection || openingCollection}
-                className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 transition-colors inline-flex items-center gap-1.5"
-              >
-                {openingCollection ? <LoadingSpinner className="w-3 h-3" /> : null}
-                {openingCollection ? "פותח..." : "פתח איסוף"}
-              </button>
-              {selectedWeekSummary?.status === "COLLECTING" && (
-                <button
-                  type="button"
-                  onClick={() => void handleForceLock()}
-                  disabled={forceLocking}
-                  className="h-8 px-3 rounded-lg border border-amber-400 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                >
-                  {forceLocking ? <LoadingSpinner className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                  {forceLocking ? "נועל..." : "נעל שבוע"}
-                </button>
-              )}
-
-              {selectedWeekSummary && (selectedWeekSummary.status === "LOCKED" ||
-                selectedWeekSummary.status === "SOLVED" ||
-                selectedWeekSummary.status === "PUBLISHED") && (
-                <button
-                  type="button"
-                  onClick={() => void handleSolveWeek()}
-                  disabled={solving || isSolverRunning}
-                  className="h-8 px-3 rounded-lg bg-[#0f7a82] text-white text-xs font-medium hover:bg-[#0a6169] disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                >
-                  {isSolverRunning ? (
-                    <LoadingSpinner className="w-3 h-3" />
-                  ) : (
-                    <BrainCircuit className="w-3 h-3" />
-                  )}
-                  {solving ? "מתחיל..." : isSolverRunning ? "מחשב..." : "שיבוץ חכם"}
-                </button>
-              )}
-
-              {selectedVersionId && (
-                editMode ? (
-                  <button
-                    type="button"
-                    onClick={() => { setEditMode(false); setAddSelections({}); }}
-                    disabled={savingEdit}
-                    className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1.5 transition-colors"
-                  >
-                    {savingEdit ? (
-                      <LoadingSpinner className="w-3 h-3 text-[#1d5c8b]" />
-                    ) : (
-                      <CheckCircle2 className="w-3 h-3 text-[#1d5c8b]" />
-                    )}
-                    סיים עריכה
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleEnterEditMode}
-                    className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    עריכה ידנית
-                  </button>
-                )
-              )}
-
-              {versions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen(true)}
-                  className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 transition-colors"
-                >
-                  <History className="w-3 h-3" />
-                  היסטוריה
-                </button>
-              )}
-
-              {selectedVersionId && (
-                <button
-                  type="button"
-                  onClick={() => void handlePublish()}
-                  disabled={publishing}
-                  className="h-8 px-3 rounded-lg bg-[#1d5c8b] text-white text-xs font-medium hover:bg-[#164e78] disabled:opacity-40 inline-flex items-center gap-1.5 transition-colors"
-                >
-                  {publishing ? (
-                    <LoadingSpinner className="w-3 h-3" />
-                  ) : (
-                    <Send className="w-3 h-3" />
-                  )}
-                  {publishing ? "מפרסם..." : "פרסם"}
-                </button>
-              )}
-
-            </div>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold text-slate-900">חדר בקרה · משמרות</h1>
+            <p className="text-slate-500 mt-1">מבט-על מחלקתי, סטטוס צוות, ותוכנית חודשית.</p>
           </div>
 
-          {/* Solver run status — only shows when active */}
-          {activeSolveRun && (
-            <div
-              className={`rounded-lg px-3 py-2 flex items-center gap-2 text-xs ${
-                activeSolveRun.status === "SUCCEEDED"
-                  ? "bg-green-50 border border-green-200 text-green-800"
-                  : activeSolveRun.status === "FAILED"
-                    ? "bg-red-50 border border-red-200 text-red-800"
-                    : "bg-teal-50 border border-teal-200 text-teal-800"
-              }`}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+              <CalendarDays className="w-4 h-4 text-[#1d5c8b]" />
+              <span className="text-xs font-semibold text-slate-600">חודש</span>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
+                aria-label="בחר חודש"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void fetchDeptStatuses()}
+              disabled={loadingDeptStatuses}
+              className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2 shadow-sm"
             >
-              {(activeSolveRun.status === "QUEUED" || activeSolveRun.status === "RUNNING") && (
-                <LoadingSpinner className="w-3.5 h-3.5" />
-              )}
-              {activeSolveRun.status === "SUCCEEDED" && (
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              )}
-              {activeSolveRun.status === "FAILED" && (
-                <XCircle className="w-3.5 h-3.5 shrink-0" />
-              )}
-              <span className="flex-1">
-                {activeSolveRun.status === "QUEUED" && "ממתין להפעלה..."}
-                {activeSolveRun.status === "RUNNING" && "מחשב סידור אופטימלי..."}
-                {activeSolveRun.status === "SUCCEEDED" && "השיבוץ הושלם — ניתן לסקור ולפרסם."}
-                {activeSolveRun.status === "FAILED" &&
-                  `נכשל: ${activeSolveRun.errorMessage ?? "שגיאה לא ידועה"}`}
-              </span>
-            </div>
-          )}
-        </section>
-
-        <WeekPickerModal
-          isOpen={showWeekModal}
-          weeks={weeks}
-          selectedWeek={selectedWeek}
-          onClose={() => setShowWeekModal(false)}
-          onSelectWeekStart={handleSelectWeekStart}
-        />
-
-        <DuplicateWeekModal
-          isOpen={showDuplicateWeekModal}
-          weeks={weeks}
-          defaultSourceWeek={selectedWeek}
-          defaultTargetWeek={defaultDuplicateTargetWeek}
-          onClose={() => setShowDuplicateWeekModal(false)}
-          onSubmit={handleDuplicateWeek}
-        />
-
-        <CollectionDeadlineModal
-          isOpen={showCollectionDeadlineModal}
-          weekStart={selectedWeek}
-          currentDeadline={selectedWeekSummary?.collectionDeadline ?? null}
-          onClose={() => setShowCollectionDeadlineModal(false)}
-          onSubmit={openConstraintCollection}
-        />
-
-
-        <ShiftFormModal
-          isOpen={isShiftModalOpen}
-          mode={shiftModalMode}
-          weekStart={selectedWeek}
-          initialShiftDate={draftShiftDate}
-          shiftToEdit={shiftToEdit}
-          onClose={() => setIsShiftModalOpen(false)}
-          onSubmit={handleSubmitShift}
-        />
-
-        <WeekShiftGrid
-          weekStart={selectedWeek}
-          weekDates={weekDates}
-          shifts={shifts}
-          loading={loadingShifts}
-          scheduleAssignments={scheduleAssignments}
-          editMode={editMode}
-          savingEdit={savingEdit}
-          allStaff={allStaff}
-          addSelections={addSelections}
-          onSelectAddUser={handleSetAddSelection}
-          onAddAssignment={handleAddAssignment}
-          onRemoveAssignment={handleRemoveAssignment}
-          onAddShift={handleAddShift}
-          onEditShift={handleEditShift}
-          onDeleteShift={handleDeleteShift}
-        />
-
-        {!loadingWeeks && weeks.length === 0 && (
-          <p className="text-slate-500">
-            אין שבועות עדיין. פתח את הקאלנדר ובחר תאריך כדי ליצור שבוע חדש.
-          </p>
-        )}
-      </div>
-
-      {historyOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
-          onClick={() => setHistoryOpen(false)}
-        >
-          <div
-            className="w-full max-w-md max-h-[80vh] flex flex-col bg-white rounded-2xl shadow-xl border border-slate-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <h3 className="text-base font-bold text-slate-900 inline-flex items-center gap-2">
-                <History className="w-4 h-4 text-[#1d5c8b]" />
-                היסטוריית גרסאות ({versions.length})
-              </h3>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(false)}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors"
-              >
-                <X className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-            <div className="overflow-y-auto p-3 space-y-2">
-              {versions.length === 0 ? (
-                <p className="text-sm text-slate-500 px-2 py-4 text-center">
-                  אין גרסאות לשבוע זה.
-                </p>
+              {loadingDeptStatuses ? (
+                <LoadingSpinner className="w-4 h-4 text-[#1d5c8b]" />
               ) : (
-                versions.map((version) => {
-                  const isSelected = selectedVersionId === version.id;
-                  const violations =
-                    typeof version.solverMeta?.soft_violations === "number"
-                      ? version.solverMeta.soft_violations
-                      : null;
-                  const wallTime =
-                    typeof version.solverMeta?.wall_time_seconds === "number"
-                      ? version.solverMeta.wall_time_seconds
-                      : null;
-                  const isOptimal = version.solverMeta?.solver_status === "optimal";
-                  return (
-                    <button
-                      key={version.id}
-                      type="button"
-                      onClick={() => void handleSelectVersion(version.id)}
-                      className={`w-full text-right rounded-xl border p-3 transition-all ${
-                        isSelected
-                          ? "border-[#1d5c8b]/40 bg-[#ebf4fb]/40 ring-1 ring-[#ebf4fb]"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className={`text-sm font-semibold ${isSelected ? "text-[#1d5c8b]" : "text-slate-800"}`}>
-                          גרסה #{version.versionNumber}
-                        </p>
-                        {version.isPublished && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-[#ebf4fb] px-1.5 py-0.5 text-[10px] font-bold text-[#1d5c8b]">
-                            <BadgeCheck className="w-2.5 h-2.5" />
-                            פעילה
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {version.assignmentCount} שיבוצים · {dateTimeFormatter.format(new Date(version.createdAt))}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        {violations !== null && (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              violations === 0
-                                ? "bg-[#ebf4fb] text-[#1d5c8b]"
-                                : violations <= 2
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {violations === 0 ? (
-                              <CheckCircle2 className="w-2.5 h-2.5" />
-                            ) : (
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                            )}
-                            {violations === 0 ? "ללא הפרות" : `${violations} הפרות`}
-                          </span>
-                        )}
-                        {isOptimal && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            אופטימלי
-                          </span>
-                        )}
-                        {wallTime !== null && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
-                            <Clock className="w-2.5 h-2.5" />
-                            {wallTime.toFixed(1)} שנ׳
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
+                <RefreshCcw className="w-4 h-4 text-slate-500" />
               )}
-            </div>
+              רענן סטטוס
+            </button>
           </div>
-        </div>
-      )}
+        </header>
+
+        <ResizableSplit
+          direction="horizontal"
+          initialPrimarySizePct={splitPct.value}
+          minPrimarySizePct={26}
+          maxPrimarySizePct={55}
+          onPrimarySizePctChange={(next) => splitPct.set(next)}
+          className="min-h-[72vh]"
+          primary={
+            <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
+              <div className="px-4 sm:px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-slate-900">מחלקות</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">סטטוס לחודש {monthLabel}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                    <Users className="w-3.5 h-3.5" />
+                    {deptStatuses.length}
+                  </span>
+                </div>
+              </div>
+
+              {deptStatusesError ? (
+                <div className="p-4 text-sm text-rose-700 bg-rose-50 border-b border-rose-200">
+                  {deptStatusesError}
+                </div>
+              ) : null}
+
+              <div className="p-3 sm:p-4 overflow-y-auto min-h-0">
+                {loadingDeptStatuses ? (
+                  <LoadingState label="טוען סטטוס מחלקות..." className="p-8" />
+                ) : deptStatuses.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                    <Building2 className="w-6 h-6 text-slate-400 mx-auto" />
+                    <p className="mt-3 text-sm font-semibold text-slate-700">אין מחלקות להצגה</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      ודא שקיימות מחלקות פעילות ושיש נתונים לחודש זה.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {deptStatuses.map((d) => {
+                      const isSelected = d.id === selectedDeptId;
+                      const inactivePct =
+                        d.totalMembers > 0
+                          ? Math.round((d.inactiveMembers / d.totalMembers) * 100)
+                          : 0;
+                      const activePct =
+                        d.totalMembers > 0
+                          ? Math.round((d.activeMembers / d.totalMembers) * 100)
+                          : 0;
+
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDeptId(d.id);
+                            navigate(`/shifts/department/${encodeURIComponent(d.id)}/month?month=${encodeURIComponent(month)}`);
+                          }}
+                          className={`text-right rounded-2xl border p-3 transition-all focus:outline-none focus:ring-2 focus:ring-[#1d5c8b] ${
+                            isSelected
+                              ? "border-[#1d5c8b]/35 bg-[#ebf4fb]/35 shadow-sm"
+                              : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 truncate">{d.name}</p>
+                              <p className="text-[11px] text-slate-500 font-mono mt-0.5" dir="ltr">
+                                {d.code}
+                              </p>
+                            </div>
+                            <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                              <Users className="w-3.5 h-3.5 text-slate-400" />
+                              {d.totalMembers}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+                              <p className="text-[10px] text-slate-500 font-semibold">סה״כ</p>
+                              <p className="text-lg font-extrabold text-slate-900 leading-none mt-1">
+                                {d.totalMembers}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-teal-200/70 bg-teal-50/40 px-2.5 py-2">
+                              <p className="text-[10px] text-teal-700 font-semibold">
+                                פעילים · {activePct}%
+                              </p>
+                              <p className="text-lg font-extrabold text-teal-800 leading-none mt-1">
+                                {d.activeMembers}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-amber-200/70 bg-amber-50/40 px-2.5 py-2">
+                              <p className="text-[10px] text-amber-800 font-semibold">
+                                לא פעילים · {inactivePct}%
+                              </p>
+                              <p className="text-lg font-extrabold text-amber-900 leading-none mt-1">
+                                {d.inactiveMembers}
+                              </p>
+                            </div>
+                          </div>
+
+                          {d.metAssigned === false ? (
+                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-700 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="font-bold">חסר שיבוץ למחלקה</p>
+                                <p className="text-amber-800/90 mt-0.5">
+                                  סה״כ חסר: {d.missingAssigned?.total ?? "—"} · בכירים:{" "}
+                                  {d.missingAssigned?.senior ?? "—"} · רגילים:{" "}
+                                  {d.missingAssigned?.regular ?? "—"} · מתמחים:{" "}
+                                  {d.missingAssigned?.intern ?? "—"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : d.metActive === false ? (
+                            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 mt-0.5 text-slate-500 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="font-bold">חסר כוח אדם פעיל</p>
+                                <p className="text-slate-600 mt-0.5">
+                                  סה״כ חסר: {d.missingActive?.total ?? "—"} · בכירים:{" "}
+                                  {d.missingActive?.senior ?? "—"} · רגילים:{" "}
+                                  {d.missingActive?.regular ?? "—"} · מתמחים:{" "}
+                                  {d.missingActive?.intern ?? "—"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+          }
+          secondary={
+            <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
+              <div className="px-4 sm:px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-slate-900">תוכנית חודשית</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {selectedDeptId ? `מחלקה נבחרת · ${monthLabel}` : "בחר מחלקה כדי להציג תוכנית"}
+                    </p>
+                  </div>
+                  {selectedDeptId ? (
+                    <button
+                      type="button"
+                      onClick={() => void fetchMonthPlan(selectedDeptId)}
+                      disabled={loadingMonthPlan}
+                      className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-2"
+                    >
+                      {loadingMonthPlan ? (
+                        <LoadingSpinner className="w-3.5 h-3.5 text-[#1d5c8b]" />
+                      ) : (
+                        <RefreshCcw className="w-3.5 h-3.5 text-slate-500" />
+                      )}
+                      רענן
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {monthPlanError ? (
+                <div className="p-4 text-sm text-rose-700 bg-rose-50 border-b border-rose-200">
+                  {monthPlanError}
+                </div>
+              ) : null}
+
+              <div className="p-3 sm:p-4 overflow-y-auto min-h-0">
+                {!selectedDeptId ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                    <CalendarDays className="w-6 h-6 text-slate-400 mx-auto" />
+                    <p className="mt-3 text-sm font-semibold text-slate-700">בחר מחלקה משמאל</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      ואז תוכל לראות את התכנון החודשי למחלקה.
+                    </p>
+                  </div>
+                ) : loadingMonthPlan ? (
+                  <LoadingState label="טוען תוכנית חודשית..." className="p-10" />
+                ) : monthPlan ? (
+                  <div className="space-y-2">
+                    {monthPlan.days?.length ? (
+                      monthPlan.days.map((day) => {
+                        const shiftCount = day.shifts?.length ?? 0;
+                        return (
+                          <div key={day.date} className="rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-900">{day.date}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {shiftCount ? `${shiftCount} משמרות` : "אין משמרות"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {shiftCount ? (
+                              <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2">
+                                {day.shifts?.map((s) => (
+                                  <div
+                                    key={String(s.id)}
+                                    className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-sm font-bold text-slate-900 truncate">
+                                        {s.label ?? "משמרת"}
+                                      </p>
+                                      {typeof s.assignmentsCount === "number" ? (
+                                        <span className="text-[11px] font-semibold text-slate-500">
+                                          שובצו: {s.assignmentsCount}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {(s.startTime || s.endTime) && (
+                                      <p className="text-xs text-slate-600 mt-1" dir="ltr">
+                                        {s.startTime ?? "--:--"} – {s.endTime ?? "--:--"}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                        <p className="text-sm font-semibold text-slate-700">אין ימים בתגובה</p>
+                        <p className="mt-1 text-xs text-slate-500">ה-backend צריך להחזיר `days[]` לחודש.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                    <p className="text-sm font-semibold text-slate-700">אין תוכנית להצגה</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      נסה לרענן, או ודא שיש נתונים למחלקה ולחודש הנבחר.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+          }
+        />
+      </div>
     </div>
   );
 }

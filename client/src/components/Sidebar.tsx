@@ -20,6 +20,8 @@ type SidebarProps = {
   onToggleCollapse: () => void;
   onNavigate: (path: string) => void;
   onAuthAction: () => void;
+  onResize?: (nextWidthPx: number) => void;
+  sidebarWidthPx?: number;
 };
 
 export default function Sidebar({
@@ -32,6 +34,8 @@ export default function Sidebar({
   onToggleCollapse,
   onNavigate,
   onAuthAction,
+  onResize,
+  sidebarWidthPx,
 }: SidebarProps) {
   const handleNavigate = (path: string) => {
     onNavigate(path);
@@ -58,6 +62,35 @@ export default function Sidebar({
         className={`sidebar ${open ? "is-open" : ""} ${collapsed ? "is-collapsed" : ""}`}
         aria-label="Sidebar menu"
       >
+        {!collapsed && onResize && typeof sidebarWidthPx === "number" ? (
+          <button
+            type="button"
+            className="sidebar-resize-handle"
+            aria-label="Resize sidebar"
+            onPointerDown={(e) => {
+              const startX = e.clientX;
+              const startWidth = sidebarWidthPx;
+              e.currentTarget.setPointerCapture(e.pointerId);
+
+              const minW = 220;
+              const maxW = 380;
+
+              const onMove = (evt: PointerEvent) => {
+                const delta = evt.clientX - startX;
+                const next = Math.min(maxW, Math.max(minW, startWidth + delta));
+                onResize(next);
+              };
+              const onUp = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+              };
+
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+            }}
+          />
+        ) : null}
+
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <span className="sidebar-logo" aria-hidden="true" />
@@ -137,7 +170,7 @@ export default function Sidebar({
                 title="ניהול משמרות"
               >
                 <CalendarDays size={18} />
-                <span>ניהול משמרות </span>
+                <span>חדר בקרה</span>
               </button>
 
               <button

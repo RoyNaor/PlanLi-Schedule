@@ -72,6 +72,7 @@ export function ChatBot() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
